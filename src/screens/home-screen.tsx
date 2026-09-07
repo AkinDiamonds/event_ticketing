@@ -76,7 +76,7 @@ type HomeScreenProps = {
 export function HomeScreen({ tabs }: HomeScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
-      <TopBar menuHref={tabs.profile} />
+      <TopBar menuHref={tabs.profile} homeRef='/' />
 
       <div className="px-4 pb-4 pt-3">
         <h1 className="text-[28px] font-black leading-[1.08] tracking-[-0.04em] text-[#101010]">

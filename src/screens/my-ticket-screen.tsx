@@ -10,7 +10,7 @@ type MyTicketScreenProps = {
 export function MyTicketScreen({ backHref, ordersHref }: MyTicketScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-white">
-      <TopBar title="My Ticket" backHref={backHref} />
+      <TopBar title="My Ticket" backHref={backHref} homeRef='/' />
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
         <TicketCard
           title="TECH SUMMIT 2026"

@@ -55,7 +55,7 @@ function TicketListCard({
 export default function TicketsPage() {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
-      <TopBar title="Tickets" subtitle="Browse upcoming events" />
+      <TopBar title="Tickets" subtitle="Browse upcoming events" homeRef='/'/>
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
         <div className="space-y-3">
           <TicketListCard

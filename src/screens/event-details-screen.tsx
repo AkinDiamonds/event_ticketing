@@ -12,7 +12,7 @@ type EventDetailsScreenProps = {
 export function EventDetailsScreen({ backHref, continueHref }: EventDetailsScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
-      <TopBar backHref={backHref} />
+      <TopBar backHref={backHref} homeRef='/'/>
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
         <EventBanner
           title="TECH SUMMIT 2026"

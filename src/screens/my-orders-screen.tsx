@@ -40,7 +40,7 @@ type MyOrdersScreenProps = {
 export function MyOrdersScreen({ backHref }: MyOrdersScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
-      <TopBar title="My Orders" backHref={backHref} />
+      <TopBar title="My Orders" backHref={backHref} homeRef='/' />
       <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
         <div className="grid grid-cols-2 rounded-[0.5rem] bg-[#f4f1ea] p-1 text-center text-[12px] font-semibold text-[#6f695e]">
           <div className="rounded-[14px] bg-white py-2 text-[#171717] shadow-sm">Upcoming</div>

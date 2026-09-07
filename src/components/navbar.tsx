@@ -10,6 +10,7 @@ type TopBarProps = {
   backHref?: string
   shareHref?: string
   menuHref?: string
+  homeRef?: string
 }
 
 export function TopBar({
@@ -19,6 +20,7 @@ export function TopBar({
   backHref,
   shareHref,
   menuHref,
+  homeRef
 }: TopBarProps) {
   const { navigate } = useRouter()
   const tone = variant === 'dark' ? 'text-white' : 'text-[#101010]'
@@ -54,7 +56,9 @@ export function TopBar({
             <BackIcon className={cn('h-5 w-5', iconTone)} />
           </a>
         ) : (
-          <LogoMark className="h-8 w-8" />
+          <a href={homeRef}>
+            <LogoMark className="h-8 w-8" />
+          </a>
         )}
         <div>
           {title ? (
