@@ -1,3 +1,32 @@
+# Dependencies & build output
 node_modules/
 dist/
+drizzle/
+
+# Environment secrets — never commit these
 .env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Test & coverage output
+coverage/
+.vitest/
+
+# OS & editor noise
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# Docker
+.dockerignore

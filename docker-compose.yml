@@ -1,22 +1,23 @@
-version: '3.9'
+version: "3.9"
+
 services:
   postgres:
-    image: postgres :16-alpine
+    image: postgres:16-alpine
     container_name: event_ticketing_db
     restart: unless-stopped
-
-
-    enviroment:
+    environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
-
     ports:
-      - "${DB_PORT}:5432"
-
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - event_ticketing_pgdata:/var/lib/postgresql/data
-  
-  volumes:
-    event_ticketing_pgdata:
-    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  event_ticketing_pgdata:
