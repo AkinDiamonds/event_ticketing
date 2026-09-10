@@ -12,3 +12,4 @@ Which micro-plan (see [`plans/`](./plans/)) was delivered by whom.
 | ---- | ------------------------------------- | ----------- | ------------------- |
 | 01   | Technical Documentation            | @AkinDiamonds | ✅ Done |
 | 02   | Foundation and verification | @AkinDiamonds | ✅ Done |
+| 03   | Authentication | @AkinDiamonds | ✅ Done |

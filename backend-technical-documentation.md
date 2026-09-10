@@ -82,7 +82,7 @@ src/
 
 1. Clone the repo.
 2. `cp .env.example .env` and fill in every value (see Section 4).
-3. `docker compose -f docker-compose.yml up -d postgres` — starts the local Postgres container.
+3. `docker-compose up -d db` — starts Postgres in a container.
 4. `npm install`
 5. `npm run db:migrate` — applies the schema to your local database.
 6. `npm run db:seed` — optional, loads sample events/tickets for local testing.
@@ -271,13 +271,13 @@ This section is the part nobody can infer from the code alone — read it before
 
 ### Preventing overselling
 
-`quantitySold + quantityReserved` must never be allowed to exceed `quantityAvailable`, even under concurrent purchases in the last seconds before a tier sells out. Reserve stock with an atomic, conditional update inside the same transaction that creates the order — for example:
+`quantitySold` must never be allowed to exceed `quantityAvailable`, even under concurrent purchases in the last seconds before a tier sells out. Increment it with an atomic, conditional update inside the same transaction that creates the order — for example:
 
 ```sql
 UPDATE ticket_tiers
-SET quantity_reserved = quantity_reserved + :qty
+SET quantity_sold = quantity_sold + :qty
 WHERE id = :tierId
-  AND quantity_sold + quantity_reserved + :qty <= quantity_available;
+  AND quantity_sold + :qty <= quantity_available;
 ```
 
 If this update affects zero rows, the tier didn't have enough stock left — fail the order before it ever reaches Paystack, don't take someone's money for a ticket that doesn't exist.
