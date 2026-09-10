@@ -9,6 +9,7 @@ if (!existsSync("drizzle/meta/_journal.json")) {
 const command = process.platform === "win32" ? "npx.cmd" : "npx";
 const child = spawn(command, ["drizzle-kit", "migrate"], {
   cwd: process.cwd(),
+  shell: process.platform === "win32",
   env: {
     ...process.env,
     DATABASE_URL:

@@ -4,13 +4,20 @@
 Implement email/password authentication with email verification, JWT access and refresh tokens, token rotation/revocation, password reset, and middleware that exposes the authenticated user to protected routes.
 
 ## Files touched
-- [ ] `backend/src/features/auth/`
-- [ ] `backend/src/db/schema.ts`
-- [ ] `backend/src/shared/middleware/authenticate.ts`
-- [ ] `backend/src/shared/middleware/validate.ts`
-- [ ] `backend/src/shared/utils/email.ts`
-- [ ] `backend/src/db/migrations/`
-- [ ] `backend/src/app.ts`
+- [x] `backend/src/features/auth/`
+- [x] `backend/src/db/schema.ts`
+- [x] `backend/src/shared/middleware/authenticate.ts`
+- [x] `backend/src/shared/middleware/validate.ts`
+- [x] `backend/src/shared/utils/email.ts`
+- [x] `backend/src/shared/utils/password.ts`
+- [x] `backend/src/shared/utils/tokens.ts`
+- [x] `backend/src/types/express.d.ts`
+- [x] `backend/src/config/openapi.ts`
+- [x] `backend/drizzle/`
+- [x] `backend/src/app.ts`
+- [x] `backend/package.json`
+- [x] `backend/package-lock.json`
+- [x] `.gitignore`
 
 ## Out of scope - do NOT touch
 - [ ] Event, order, ticket, payment, check-in, notification, or upload business logic
@@ -25,6 +32,7 @@ Implement email/password authentication with email verification, JWT access and 
 - [ ] Password reset revokes every refresh token for the user.
 - [ ] Forgot-password returns the same success response for unknown email.
 - [ ] Email delivery failure does not make registration or reset token creation inconsistent.
+- [x] Resending verification invalidates previous verification tokens.
 
 ## Steps
 1. Add auth tables and a committed migration.
@@ -34,17 +42,22 @@ Implement email/password authentication with email verification, JWT access and 
 5. Register the feature in the app and generated API documentation.
 
 ## Acceptance criteria
-- [ ] All nine auth endpoints use the standard response envelope.
-- [ ] Register, verify, login, refresh, logout, logout-all, forgot-password, and reset-password flows pass end to end.
-- [ ] Every endpoint has happy-path, validation-failure, and applicable auth-failure coverage.
-- [ ] The fresh migration set applies successfully before tests run.
+- [x] All nine auth endpoints use the standard response envelope.
+- [x] Register, verify, login, refresh, logout, logout-all, forgot-password, and reset-password flows pass end to end.
+- [x] Every endpoint has happy-path, validation-failure, and applicable auth-failure coverage.
+- [x] The fresh migration set applies successfully before tests run.
+
+## Dependency justifications
+
+- `jsonwebtoken`, `bcryptjs`, and `express-rate-limit`: required for JWT sessions, password hashing, and public auth abuse protection.
+- `@asteasolutions/zod-to-openapi`, `swagger-ui-express`, and `@types/swagger-ui-express`: generate and serve the documented auth contract from the existing Zod schemas.
 
 ## Security checklist (delete lines that don't apply)
-- [ ] External input validated
-- [ ] Parameterized queries only
-- [ ] Auth checked in middleware
-- [ ] Rate limited if public endpoint
+- [x] External input validated
+- [x] Parameterized queries only
+- [x] Auth checked in middleware
+- [x] Rate limited if public endpoint
 
-## Understanding note (fill in AFTER, in your own words)
+## Understanding note
 Why this works:
-The service owns authentication state while middleware owns request authentication. Raw credentials and tokens never reach logs or storage, and the disposable database verifies the schema and token lifecycle together.
+The feature owns its tables and persistence operations, the service owns authentication rules, and middleware owns request authentication. Raw credentials and tokens never reach logs or storage, and disposable Postgres verifies the schema and token lifecycle together. And the API docs generated directly from the schemas.

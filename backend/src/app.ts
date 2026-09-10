@@ -1,8 +1,11 @@
 import express, { type Application } from "express";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
 import { env } from "#config/env.js";
+import { createOpenApiDocument } from "#config/openapi.js";
 import { errorHandler } from "#shared/middleware/error-handler.js";
 import healthRouter from "#features/health/health.router.js";
+import authRouter from "#features/auth/auth.routes.js";
 
 /**
  * createApp builds and returns the configured Express application.
@@ -24,12 +27,19 @@ export function createApp(): Application {
 
   // ── Routes ───────────────────────────────────────────────────────────────
   app.use("/api/health", healthRouter);
+  app.use("/api/v1/auth", authRouter);
 
-  // TODO (Plan 02): mount auth router   → app.use("/api/v1/auth", authRouter)
-  // TODO (Plan 03): mount events router → app.use("/api/v1/events", eventsRouter)
-  // TODO (Plan 04): mount orders router → app.use("/api/v1/orders", ordersRouter)
-  // TODO (Plan 04): mount payments router → app.use("/api/v1/payments", paymentsRouter)
-  // TODO (Plan 05): mount tickets router → app.use("/api/v1/tickets", ticketsRouter)
+  if (env.ENABLE_SWAGGER) {
+    app.get("/api/docs.json", (_req, res) => {
+      res.json(createOpenApiDocument());
+    });
+    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(createOpenApiDocument()));
+  }
+
+  // TODO (Plan 04): mount events router → app.use("/api/v1/events", eventsRouter)
+  // TODO (Plan 05): mount orders router → app.use("/api/v1/orders", ordersRouter)
+  // TODO (Plan 05): mount payments router → app.use("/api/v1/payments", paymentsRouter)
+  // TODO (Plan 06): mount tickets router → app.use("/api/v1/tickets", ticketsRouter)
 
   // ── Error handling (must be last) ────────────────────────────────────────
   app.use(errorHandler);
