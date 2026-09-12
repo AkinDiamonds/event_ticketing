@@ -22,6 +22,15 @@ Let verified users create and manage events and ticket tiers, while public users
 - [ ] Soft-deleted events disappear from public reads.
 - [ ] Prices are integer kobo and quantities are positive integers.
 - [ ] `quantitySold` and `quantityReserved` are not organizer-editable.
+- [ ] A verified non-organizer can create their first event; the event creation transaction also promotes that user to organizer.
+- [ ] Organizer authorization uses current database state, so a user can become an organizer without requiring a new login or stale-token workaround.
+- [ ] Updates and tier mutations reject missing, soft-deleted, or foreign-owned events without leaking their existence across ownership boundaries.
+- [ ] Deleted events cannot receive new tier mutations, and deleting an event does not hard-delete rows that later plans may reference.
+- [ ] Event titles, descriptions, venues, dates, and tier names reject empty or malformed values; event start times are interpreted and compared in UTC.
+- [ ] Ticket tier names are unique within an event, and tier prices/quantities cannot be negative, zero where prohibited, or unsafe integers.
+- [ ] Creating an event with its initial tiers is atomic: neither the event nor partial tiers remain after a failure.
+- [ ] Public reads exclude deleted events and do not expose organizer-only mutation fields or internal ownership details unnecessarily.
+- [ ] Concurrent first-event creation cannot leave inconsistent organizer state or create partial event records.
 
 ## Steps
 1. Add event and tier tables, including `quantityReserved`, and commit the migration.

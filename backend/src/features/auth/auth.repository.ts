@@ -9,6 +9,17 @@ import {
 
 export type User = typeof users.$inferSelect;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type AuthTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+export async function promoteUserToOrganizer(
+  tx: AuthTransaction,
+  userId: string
+): Promise<void> {
+  await tx
+    .update(users)
+    .set({ isOrganizer: true, updatedAt: new Date() })
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+}
 
 export async function findUserByEmail(email: string): Promise<User | undefined> {
   const [user] = await getDb()
