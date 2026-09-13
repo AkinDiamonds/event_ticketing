@@ -1,7 +1,6 @@
 import {
   ConflictError,
   EmailNotVerifiedError,
-  ForbiddenError,
   NotFoundError,
 } from "#shared/utils/errors.js";
 import { findUserById } from "#features/auth/index.js";
@@ -10,14 +9,13 @@ import {
   createTier,
   deleteTier,
   findActiveEventById,
-  findOwnedEvent,
   findOwnedTier,
   listActiveEvents,
   softDeleteEvent,
   updateEvent,
   updateTier,
 } from "./events.repository.js";
-import type { Event, TicketTier } from "./events.repository.js";
+import type { Event, TicketTier, PublicEvent, PublicTicketTier } from "./events.repository.js";
 import type {
   CreateEventInput,
   CreateTierInput,
@@ -26,13 +24,15 @@ import type {
   UpdateTierInput,
 } from "./events.schemas.js";
 
+/** Public-facing response for event list and detail endpoints. */
 export interface EventDetails {
-  event: Event;
-  tiers: TicketTier[];
+  event: PublicEvent;
+  tiers: PublicTicketTier[];
 }
 
+/** Public-facing response for event list endpoint with pagination. */
 export interface EventListResult {
-  items: Event[];
+  items: PublicEvent[];
   pagination: {
     page: number;
     limit: number;
@@ -102,16 +102,14 @@ export async function editEvent(
   eventId: string,
   input: UpdateEventInput
 ): Promise<Event> {
-  await requireOwnedEvent(userId, eventId);
-
-  const updateInput: Parameters<typeof updateEvent>[1] = {};
+  const updateInput: Partial<Pick<Event, "title" | "description" | "bannerImageUrl" | "venue" | "startsAt">> = {};
   if (input.title !== undefined) updateInput.title = input.title;
   if (input.description !== undefined) updateInput.description = input.description;
   if (input.bannerImageUrl !== undefined) updateInput.bannerImageUrl = input.bannerImageUrl;
   if (input.venue !== undefined) updateInput.venue = input.venue;
   if (input.startsAt !== undefined) updateInput.startsAt = new Date(input.startsAt);
 
-  const event = await updateEvent(eventId, updateInput);
+  const event = await updateEvent(eventId, userId, updateInput);
   if (!event) {
     throw new NotFoundError("Event not found");
   }
@@ -120,9 +118,7 @@ export async function editEvent(
 }
 
 export async function deleteEvent(userId: string, eventId: string): Promise<Event> {
-  await requireOwnedEvent(userId, eventId);
-
-  const event = await softDeleteEvent(eventId);
+  const event = await softDeleteEvent(eventId, userId);
   if (!event) {
     throw new NotFoundError("Event not found");
   }
@@ -135,10 +131,12 @@ export async function addTier(
   eventId: string,
   input: CreateTierInput
 ): Promise<TicketTier> {
-  await requireOwnedEvent(userId, eventId);
-
   try {
-    return await createTier({ eventId, ...input });
+    const tier = await createTier({ eventId, organizerId: userId, ...input });
+    if (!tier) {
+      throw new NotFoundError("Event not found");
+    }
+    return tier;
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError("A ticket tier name must be unique within an event");
@@ -153,7 +151,11 @@ export async function editTier(
   tierId: string,
   input: UpdateTierInput
 ): Promise<TicketTier> {
-  const tier = await requireOwnedTier(userId, eventId, tierId);
+  // First check quantity constraints by fetching current tier state
+  const tier = await findOwnedTier(eventId, tierId, userId);
+  if (!tier) {
+    throw new NotFoundError("Ticket tier not found");
+  }
   if (
     input.quantityAvailable !== undefined &&
     input.quantityAvailable < tier.quantityReserved + tier.quantitySold
@@ -162,14 +164,14 @@ export async function editTier(
   }
 
   try {
-    const updateInput: Parameters<typeof updateTier>[1] = {};
+    const updateInput: Partial<Pick<TicketTier, "name" | "price" | "quantityAvailable">> = {};
     if (input.name !== undefined) updateInput.name = input.name;
     if (input.price !== undefined) updateInput.price = input.price;
     if (input.quantityAvailable !== undefined) {
       updateInput.quantityAvailable = input.quantityAvailable;
     }
 
-    const updatedTier = await updateTier(tierId, updateInput);
+    const updatedTier = await updateTier(tierId, eventId, userId, updateInput);
     if (!updatedTier) {
       throw new NotFoundError("Ticket tier not found");
     }
@@ -187,45 +189,21 @@ export async function removeTier(
   eventId: string,
   tierId: string
 ): Promise<TicketTier> {
-  const tier = await requireOwnedTier(userId, eventId, tierId);
+  // First check that tier exists and has no reservations/sales
+  const tier = await findOwnedTier(eventId, tierId, userId);
+  if (!tier) {
+    throw new NotFoundError("Ticket tier not found");
+  }
   if (tier.quantityReserved > 0 || tier.quantitySold > 0) {
     throw new ConflictError("A tier with reservations or sold tickets cannot be deleted");
   }
 
-  const deletedTier = await deleteTier(tierId);
+  const deletedTier = await deleteTier(tierId, eventId, userId);
   if (!deletedTier) {
     throw new NotFoundError("Ticket tier not found");
   }
 
   return deletedTier;
-}
-
-async function requireOwnedEvent(userId: string, eventId: string): Promise<Event> {
-  const event = await findOwnedEvent(eventId, userId);
-  if (event) {
-    return event;
-  }
-
-  const user = await findUserById(userId);
-  if (!user?.isOrganizer) {
-    throw new ForbiddenError("Organizer access required");
-  }
-
-  throw new NotFoundError("Event not found");
-}
-
-async function requireOwnedTier(
-  userId: string,
-  eventId: string,
-  tierId: string
-): Promise<TicketTier> {
-  await requireOwnedEvent(userId, eventId);
-  const tier = await findOwnedTier(eventId, tierId, userId);
-  if (!tier) {
-    throw new NotFoundError("Ticket tier not found");
-  }
-
-  return tier;
 }
 
 function isUniqueViolation(error: unknown): boolean {

@@ -3,6 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { authenticate } from "#shared/middleware/authenticate.js";
 import { requireOrganizer } from "#shared/middleware/require-organizer.js";
 import { validate } from "#shared/middleware/validate.js";
+import { env } from "#config/env.js";
 import {
   createEventSchema,
   createTierSchema,
@@ -19,6 +20,9 @@ const publicEventsRateLimiter = rateLimit({
   limit: 120,
   standardHeaders: "draft-8",
   legacyHeaders: false,
+  // Skip rate limiting in the test environment so the integration test suite
+  // does not exhaust the per-window request budget and return 429 responses.
+  skip: () => env.NODE_ENV === "test",
 });
 
 const router = Router();

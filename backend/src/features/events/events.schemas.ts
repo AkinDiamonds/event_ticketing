@@ -18,8 +18,8 @@ export const tierIdParamsSchema = z.object({
 
 export const ticketTierInputSchema = z.object({
   name: nonEmptyText(100),
-  price: z.number().int().nonnegative().safe(),
-  quantityAvailable: z.number().int().positive().safe(),
+  price: z.number().int().nonnegative().safe().max(2_147_483_647),
+  quantityAvailable: z.number().int().positive().safe().max(2_147_483_647),
 });
 
 export const createEventSchema = z.object({

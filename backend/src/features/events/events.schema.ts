@@ -27,7 +27,7 @@ export const ticketTiers = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     eventId: uuid("event_id")
       .notNull()
-      .references(() => events.id, { onDelete: "cascade" }),
+      .references(() => events.id),
     name: varchar("name", { length: 100 }).notNull(),
     price: integer("price").notNull(),
     quantityAvailable: integer("quantity_available").notNull(),
@@ -49,3 +49,4 @@ export const ticketTiers = pgTable(
     ),
   ]
 );
+
