@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "imports": {
-    "#config/*.js": "./dist/config/*.js"
+    "#**": "./dist/**/*.js"
   },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --esm src/index.ts",
