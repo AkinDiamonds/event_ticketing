@@ -6,6 +6,7 @@ import { createOpenApiDocument } from "#config/openapi.js";
 import { errorHandler } from "#shared/middleware/error-handler.js";
 import healthRouter from "#features/health/health.router.js";
 import authRouter from "#features/auth/auth.routes.js";
+import eventsRouter from "#features/events/events.routes.js";
 
 /**
  * createApp builds and returns the configured Express application.
@@ -28,6 +29,7 @@ export function createApp(): Application {
   // ── Routes ───────────────────────────────────────────────────────────────
   app.use("/api/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/events", eventsRouter);
 
   if (env.ENABLE_SWAGGER) {
     app.get("/api/docs.json", (_req, res) => {
@@ -36,7 +38,6 @@ export function createApp(): Application {
     app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(createOpenApiDocument()));
   }
 
-  // TODO (Plan 04): mount events router → app.use("/api/v1/events", eventsRouter)
   // TODO (Plan 05): mount orders router → app.use("/api/v1/orders", ordersRouter)
   // TODO (Plan 05): mount payments router → app.use("/api/v1/payments", paymentsRouter)
   // TODO (Plan 06): mount tickets router → app.use("/api/v1/tickets", ticketsRouter)

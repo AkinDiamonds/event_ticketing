@@ -1,3 +1,4 @@
+
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
@@ -10,6 +11,7 @@ import {
 } from "./auth.schema.js";
 import { MemoryEmailSender } from "#shared/utils/email.js";
 import { setEmailSender } from "./auth.service.js";
+import { events, ticketTiers } from "#features/events/events.schema.js";
 
 const app = createApp();
 const emailSender = new MemoryEmailSender();
@@ -44,6 +46,8 @@ describe("GET /api/docs.json", () => {
 });
 
 beforeEach(async () => {
+  await getDb().delete(ticketTiers);
+  await getDb().delete(events);
   await getDb().delete(emailVerificationTokens);
   await getDb().delete(passwordResetTokens);
   await getDb().delete(refreshTokens);
