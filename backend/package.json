@@ -4,6 +4,9 @@
   "description": "LASU Party Tickets — Express/TypeScript backend",
   "type": "module",
   "main": "dist/index.js",
+  "imports": {
+    "#config/*.js": "./dist/config/*.js"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --esm src/index.ts",
     "build": "tsc --project tsconfig.json",
