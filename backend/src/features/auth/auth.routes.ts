@@ -2,6 +2,7 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { authenticate } from "#shared/middleware/authenticate.js";
 import { validate } from "#shared/middleware/validate.js";
+import { env } from "#config/env.js";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -18,6 +19,9 @@ const authRateLimiter = rateLimit({
   limit: 20,
   standardHeaders: "draft-8",
   legacyHeaders: false,
+  // Skip rate limiting entirely in the test environment so the integration
+  // test suite does not exhaust the per-window request budget.
+  skip: () => env.NODE_ENV === "test",
 });
 
 const router = Router();

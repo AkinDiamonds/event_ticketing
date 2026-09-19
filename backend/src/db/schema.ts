@@ -3,5 +3,6 @@
 // drizzle.config.ts and src/config/db.ts both point at this file.
 //
 export * from "#features/auth/auth.schema.js";
+export * from "#features/events/events.schema.js";
 
 // Add each feature's schema here as its plan is implemented.

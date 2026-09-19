@@ -25,7 +25,15 @@ export function validate(schemas: ValidationSchemas) {
         source === "body" ? req.body : source === "params" ? req.params : req.query;
       const result = schema.safeParse(input);
       if (result.success) {
-        (req as unknown as Record<string, unknown>)[source] = result.data;
+        if (source === "query") {
+          Object.defineProperty(req, source, {
+            configurable: true,
+            enumerable: true,
+            value: result.data,
+          });
+        } else {
+          (req as unknown as Record<string, unknown>)[source] = result.data;
+        }
       } else {
         errors.push(...result.error.issues);
       }
