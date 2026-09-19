@@ -13,3 +13,5 @@ Which micro-plan (see [`plans/`](./plans/)) was delivered by whom.
 | 01   | Technical Documentation            | @AkinDiamonds | ✅ Done |
 | 02   | Foundation and verification | @AkinDiamonds | ✅ Done |
 | 03   | Authentication | @AkinDiamonds | ✅ Done |
+| 04   | Events and ticket tiers | @AkinDiamonds | ✅ Done |
+| 05   | Orders, payments, reservations, and tickets | @AkinDiamonds | 🔄 In progress |

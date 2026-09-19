@@ -9,8 +9,8 @@ This directory contains the implementation contract for the LASU Party Tickets b
 | 01 | Technical documentation | Done | - |
 | 02 | Foundation and verification | Done | 01 |
 | 03 | Authentication | Done | 02 |
-| 04 | Events and ticket tiers | Not started | 03 |
-| 05 | Orders, payments, reservations, and tickets | Not started | 04 |
+| 04 | Events and ticket tiers | Done | 03 |
+| 05 | Orders, payments, reservations, and tickets | In progress | 04 |
 | 06 | Check-in | Not started | 05 |
 | 07 | Notifications | Not started | 05 |
 | 08 | Image uploads | Not started | 04 |
