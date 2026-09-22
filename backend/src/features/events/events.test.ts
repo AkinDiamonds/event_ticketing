@@ -1,11 +1,16 @@
-
 import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createApp } from "../../app.js";
 import { closeDb, getDb } from "#config/db.js";
-import { emailVerificationTokens, passwordResetTokens, refreshTokens, users } from "#features/auth/auth.schema.js";
+import {
+  emailVerificationTokens,
+  passwordResetTokens,
+  refreshTokens,
+  users,
+} from "#features/auth/auth.schema.js";
 import { events, ticketTiers } from "./events.schema.js";
+import { orders, orderItems, tickets } from "#features/orders/orders.schema.js";
 
 const app = createApp();
 
@@ -43,9 +48,7 @@ async function registerVerifiedUser(email: string): Promise<string> {
     throw new Error(`Registration did not return an access token (status ${response.status})`);
   }
 
-  await getDb().update(users).set({ isEmailVerified: true }).where(
-    eq(users.email, email)
-  );
+  await getDb().update(users).set({ isEmailVerified: true }).where(eq(users.email, email));
 
   return accessToken;
 }
@@ -87,6 +90,9 @@ async function createEventAsOrganizer(email: string): Promise<{
 // ── Test lifecycle ────────────────────────────────────────────────────────────
 
 beforeEach(async () => {
+  await getDb().delete(tickets);
+  await getDb().delete(orderItems);
+  await getDb().delete(orders);
   await getDb().delete(ticketTiers);
   await getDb().delete(events);
   await getDb().delete(emailVerificationTokens);
@@ -203,7 +209,9 @@ describe("event creation and ownership", () => {
       });
 
     expect(response.status).toBe(201);
-    expect(body(response).data?.event).toEqual(expect.objectContaining({ id: expect.any(String) as unknown as string }));
+    expect(body(response).data?.event).toEqual(
+      expect.objectContaining({ id: expect.any(String) as unknown as string })
+    );
     expect(body(response).data?.tiers).toHaveLength(1);
 
     const [user] = await getDb().select().from(users);
@@ -466,9 +474,7 @@ describe("ticket tier management", () => {
   });
 
   it("returns 404 when deleting a tier from a non-owned event", async () => {
-    const { eventId, tierId } = await createEventAsOrganizer(
-      "organizer-tiernot@example.com"
-    );
+    const { eventId, tierId } = await createEventAsOrganizer("organizer-tiernot@example.com");
 
     // A different organizer
     const otherToken = await registerVerifiedUser("other-tiernot@example.com");
@@ -485,9 +491,7 @@ describe("ticket tier management", () => {
   });
 
   it("requires organizer role to manage tiers", async () => {
-    const { eventId, tierId } = await createEventAsOrganizer(
-      "organizer-tierrole@example.com"
-    );
+    const { eventId, tierId } = await createEventAsOrganizer("organizer-tierrole@example.com");
     const regularToken = await registerVerifiedUser("regular-tierrole@example.com");
 
     const addRes = await request(app)

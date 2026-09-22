@@ -12,6 +12,11 @@ export async function requireOrganizer(
     return;
   }
 
+  if (req.user.isOrganizer) {
+    next();
+    return;
+  }
+
   const user = await findUserById(req.user.userId);
   if (!user?.isOrganizer) {
     next(new ForbiddenError("Organizer access required"));

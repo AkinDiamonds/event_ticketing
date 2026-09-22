@@ -8,8 +8,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   CORS_ORIGINS: z.string().default("http://localhost:5173"),
 
+  // DB
   DATABASE_URL: z.string().url("DATABASE_URL must be a valid PostgreSQL connection string"),
 
+  // AUTH
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_EXPIRES_IN: z.string().default("1h"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
@@ -17,22 +19,30 @@ const envSchema = z.object({
   PASSWORD_RESET_TOKEN_EXPIRY_MINUTES: z.coerce.number().int().positive().default(30),
   EMAIL_VERIFICATION_TOKEN_EXPIRY_MINUTES: z.coerce.number().int().positive().default(1440),
 
+  // PAYSTACK
   PAYSTACK_SECRET_KEY: z.string().min(1),
   PAYSTACK_PUBLIC_KEY: z.string().min(1),
 
+  // RESERVATION
+  ORDER_RESERVATION_MINUTES: z.coerce.number().int().positive().default(15),
+
+  // CLOUDINARY
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
 
+  // EMAIL
   EMAIL_PROVIDER_API_KEY: z.string().min(1),
   EMAIL_FROM_ADDRESS: z.string().email(),
 
+  // WHATSAPP
   WHATSAPP_ENABLED: z
     .preprocess((v) => (typeof v === "string" ? v === "true" : false), z.boolean())
     .default(false),
   WHATSAPP_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
 
+  // SWAGGER DOC
   ENABLE_SWAGGER: z
     .preprocess((v) => (typeof v === "string" ? v !== "false" : true), z.boolean())
     .default(true),
