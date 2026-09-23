@@ -45,8 +45,6 @@ export function createApp(): Application {
     app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(createOpenApiDocument()));
   }
 
-  // TODO (Plan 06): mount tickets router → app.use("/api/v1/tickets", ticketsRouter)
-
   // ── Error handling (must be last) ────────────────────────────────────────
   app.use(errorHandler);
 

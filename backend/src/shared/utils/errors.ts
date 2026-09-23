@@ -53,9 +53,9 @@ export class NotFoundError extends AppError {
   }
 }
 
-/** 409 — duplicate resource (e.g. email already registered). */
+/** 409 — duplicate resource (e.g. email already registered or ticket already used). */
 export class ConflictError extends AppError {
-  constructor(message = "Conflict") {
-    super(409, message);
+  constructor(message = "Conflict", errors?: unknown[]) {
+    super(409, message, errors);
   }
 }

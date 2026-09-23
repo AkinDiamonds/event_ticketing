@@ -9,6 +9,8 @@ import {
   updateTierSchema,
 } from "./events.schemas.js";
 
+import { checkInBodySchema } from "#features/tickets/tickets.schemas.js";
+
 const jsonBody = (schema: object) => ({
   body: { content: { "application/json": { schema } } },
 });
@@ -18,6 +20,7 @@ export function registerEventsOpenApi(registry: OpenAPIRegistry): void {
   registry.register("UpdateEventRequest", updateEventSchema);
   registry.register("CreateTierRequest", createTierSchema);
   registry.register("UpdateTierRequest", updateTierSchema);
+  registry.register("CheckInRequest", checkInBodySchema);
   registry.register("EventIdParams", eventIdParamsSchema);
   registry.register("TierIdParams", tierIdParamsSchema);
   registry.register("ListEventsQuery", listEventsQuerySchema);
@@ -75,5 +78,16 @@ export function registerEventsOpenApi(registry: OpenAPIRegistry): void {
     security: [{ bearerAuth: [] }],
     request: { params: tierIdParamsSchema },
     responses: { 200: { description: "Ticket tier deleted successfully" } },
+  });
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/events/{eventId}/check-in",
+    security: [{ bearerAuth: [] }],
+    request: { params: eventIdParamsSchema, ...jsonBody(checkInBodySchema) },
+    responses: {
+      200: { description: "Ticket checked in successfully" },
+      404: { description: "Ticket not found or belongs to another event" },
+      409: { description: "Ticket already checked in" },
+    },
   });
 }
