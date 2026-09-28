@@ -13,7 +13,9 @@ import {
   updateEventSchema,
   updateTierSchema,
 } from "./events.schemas.js";
+import { checkInBodySchema } from "#features/tickets/tickets.schemas.js";
 import * as eventsController from "./events.controller.js";
+import * as ticketsController from "#features/tickets/tickets.controller.js";
 
 const publicEventsRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -22,6 +24,14 @@ const publicEventsRateLimiter = rateLimit({
   legacyHeaders: false,
   // Skip rate limiting in the test environment so the integration test suite
   // does not exhaust the per-window request budget and return 429 responses.
+  skip: () => env.NODE_ENV === "test",
+});
+
+const checkInRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
   skip: () => env.NODE_ENV === "test",
 });
 
@@ -81,6 +91,15 @@ router.delete(
   requireOrganizer,
   validate({ params: tierIdParamsSchema }),
   eventsController.deleteTier
+);
+
+router.post(
+  "/:eventId/check-in",
+  authenticate,
+  requireOrganizer,
+  checkInRateLimiter,
+  validate({ params: eventIdParamsSchema, body: checkInBodySchema }),
+  ticketsController.checkIn
 );
 
 export default router;
