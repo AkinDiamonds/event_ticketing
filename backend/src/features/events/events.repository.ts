@@ -19,7 +19,10 @@ export type PublicEvent = Pick<
  * Public-facing ticket tier projection — excludes internal inventory fields like quantityReserved and quantitySold.
  * Unauthenticated clients see only the tier name, price, and available quantity.
  */
-export type PublicTicketTier = Pick<typeof ticketTiers.$inferSelect, "id" | "name" | "price" | "quantityAvailable">;
+export type PublicTicketTier = Pick<
+  typeof ticketTiers.$inferSelect,
+  "id" | "name" | "price" | "quantityAvailable"
+>;
 
 export async function listActiveEvents(input: { limit: number; offset: number }): Promise<{
   items: PublicEvent[];
@@ -167,7 +170,9 @@ export async function createEventWithTiers(input: {
 export async function updateEvent(
   eventId: string,
   organizerId: string,
-  input: Partial<Pick<Event, "title" | "description" | "bannerImageUrl" | "venue" | "startsAt">>
+  input: Partial<
+    Pick<Event, "title" | "description" | "bannerImageUrl" | "venue" | "startsAt">
+  >
 ): Promise<Event | undefined> {
   const [event] = await getDb()
     .update(events)
@@ -184,7 +189,10 @@ export async function updateEvent(
   return event;
 }
 
-export async function softDeleteEvent(eventId: string, organizerId: string): Promise<Event | undefined> {
+export async function softDeleteEvent(
+  eventId: string,
+  organizerId: string
+): Promise<Event | undefined> {
   const [event] = await getDb()
     .update(events)
     .set({ deletedAt: new Date(), updatedAt: new Date() })

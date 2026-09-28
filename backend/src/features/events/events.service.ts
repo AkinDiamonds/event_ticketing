@@ -1,8 +1,4 @@
-import {
-  ConflictError,
-  EmailNotVerifiedError,
-  NotFoundError,
-} from "#shared/utils/errors.js";
+import { ConflictError, EmailNotVerifiedError, NotFoundError } from "#shared/utils/errors.js";
 import { findUserById } from "#features/auth/index.js";
 import {
   createEventWithTiers,
@@ -102,7 +98,9 @@ export async function editEvent(
   eventId: string,
   input: UpdateEventInput
 ): Promise<Event> {
-  const updateInput: Partial<Pick<Event, "title" | "description" | "bannerImageUrl" | "venue" | "startsAt">> = {};
+  const updateInput: Partial<
+    Pick<Event, "title" | "description" | "bannerImageUrl" | "venue" | "startsAt">
+  > = {};
   if (input.title !== undefined) updateInput.title = input.title;
   if (input.description !== undefined) updateInput.description = input.description;
   if (input.bannerImageUrl !== undefined) updateInput.bannerImageUrl = input.bannerImageUrl;
@@ -207,7 +205,13 @@ export async function removeTier(
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && "code" in error && error.code === "23505"
-  );
+  if (typeof error !== "object" || error === null) return false;
+  const errorObj = error as Record<string, unknown>;
+  const directCode = typeof errorObj.code === "string" ? errorObj.code : undefined;
+  const cause =
+    typeof errorObj.cause === "object" && errorObj.cause !== null
+      ? (errorObj.cause as Record<string, unknown>)
+      : undefined;
+  const causeCode = cause && typeof cause.code === "string" ? cause.code : undefined;
+  return directCode === "23505" || causeCode === "23505";
 }

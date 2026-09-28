@@ -4,5 +4,6 @@
 //
 export * from "#features/auth/auth.schema.js";
 export * from "#features/events/events.schema.js";
+export * from "#features/orders/orders.schema.js";
 
 // Add each feature's schema here as its plan is implemented.

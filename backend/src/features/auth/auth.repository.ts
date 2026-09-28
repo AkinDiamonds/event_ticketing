@@ -9,7 +9,9 @@ import {
 
 export type User = typeof users.$inferSelect;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
-export type AuthTransaction = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+export type AuthTransaction = Parameters<
+  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
+>[0];
 
 export async function promoteUserToOrganizer(
   tx: AuthTransaction,

@@ -1,6 +1,16 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
-import { users } from "#features/auth/auth.schema.js";
+import {
+  check,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+import { users } from "#db/schema.js"; // I touched this line to import from the barrel instead of the auth schema directly.
 
 export const events = pgTable(
   "events",
@@ -49,4 +59,3 @@ export const ticketTiers = pgTable(
     ),
   ]
 );
-

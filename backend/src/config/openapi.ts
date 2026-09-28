@@ -1,10 +1,14 @@
 import { OpenAPIRegistry, OpenApiGeneratorV3 } from "@asteasolutions/zod-to-openapi";
 import { registerAuthOpenApi } from "#features/auth/auth.openapi.js";
 import { registerEventsOpenApi } from "#features/events/events.openapi.js";
+import { registerOrdersOpenApi } from "#features/orders/orders.openapi.js";
+import { registerPaymentsOpenApi } from "#features/payments/payments.openapi.js";
 
 const registry = new OpenAPIRegistry();
 registerAuthOpenApi(registry);
 registerEventsOpenApi(registry);
+registerOrdersOpenApi(registry);
+registerPaymentsOpenApi(registry);
 
 export function createOpenApiDocument() {
   const generator = new OpenApiGeneratorV3(registry.definitions);
