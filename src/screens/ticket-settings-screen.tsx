@@ -54,8 +54,8 @@ export function TicketSettingsScreen({ backHref }: TicketSettingsScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
       <TopBar title="Ticket Types" subtitle="Tech Summit 2026" backHref={backHref} />
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
-        <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-8 lg:mx-auto lg:w-full lg:max-w-[1050px] lg:px-0 lg:pt-8">
+        <div className="grid gap-3 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
           <TicketType title="Early Bird" price="NGN 3,000" limit="150" sold="120" />
           <TicketType title="Regular" price="NGN 5,000" limit="500" sold="240" />
           <TicketType title="VIP" price="NGN 15,000" limit="50" sold="20" accent="gold" />

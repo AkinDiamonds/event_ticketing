@@ -1,7 +1,6 @@
 import { Card } from '../../components/card'
 import { BottomNav, TopBar } from '../../components/navbar'
 import { CalendarIcon, HomeIcon, LocationIcon, OrdersIcon, ProfileIcon, TicketsIcon } from '../../components/icons'
-import { Button } from '../../components/button'
 
 function TicketListCard({
   title,
@@ -42,9 +41,9 @@ function TicketListCard({
             <p className="text-[14px] text-[#1d1d1d]">
               From <span className="font-bold text-[#1f6b42]">{price}</span>
             </p>
-            <Button size="sm" className="px-4" href={href}>
+            <span className="inline-flex h-9 items-center rounded-[10px] bg-[#ffbf1f] px-4 text-sm font-semibold text-[#241800] shadow-[0_10px_24px_rgba(255,191,31,0.18)]">
               Open
-            </Button>
+            </span>
           </div>
         </div>
       </a>
@@ -54,10 +53,10 @@ function TicketListCard({
 
 export default function TicketsPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
+    <div className="flex min-h-dvh flex-col bg-[#fbfaf7] lg:bg-[#f4f7f3]">
       <TopBar title="Tickets" subtitle="Browse upcoming events" homeRef='/'/>
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
-        <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-8 lg:px-14 lg:pt-7">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3 xl:gap-6">
           <TicketListCard
             title="Tech Summit 2026"
             date="Oct 24, 2026"
@@ -71,6 +70,13 @@ export default function TicketsPage() {
             venue="Student Arena"
             price="NGN 2,500"
             href="/tickets/freshers-welcome-week"
+          />
+          <TicketListCard
+            title="Entrepreneurship Conference"
+            date="Nov 28, 2026"
+            venue="Innovation Hub"
+            price="NGN 12,000"
+            href="/tickets/entrepreneurship-conference"
           />
         </div>
       </div>

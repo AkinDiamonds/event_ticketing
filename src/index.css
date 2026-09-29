@@ -4,8 +4,8 @@
   color-scheme: light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f4f1ea;
-  color: #121212;
+  background: #f3f6f2;
+  color: #121a15;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,7 +19,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: #fbfaf7;
+  background: #f3f6f2;
 }
 
 button,
@@ -31,4 +31,29 @@ select {
 
 #root {
   min-height: 100vh;
+}
+
+::selection {
+  background: #b9e7c8;
+  color: #092619;
+}
+
+@media (min-width: 768px) {
+  .app-stage {
+    min-height: calc(100dvh - 94px);
+  }
+
+  .app-stage > div.min-h-dvh {
+    min-height: calc(100dvh - 94px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-stage {
+    min-height: 100dvh;
+  }
+
+  .app-stage > div.min-h-dvh {
+    min-height: 100dvh;
+  }
 }

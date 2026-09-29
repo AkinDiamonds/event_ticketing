@@ -71,7 +71,7 @@ export function PaymentScreen({ backHref, payHref }: PaymentScreenProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
       <TopBar title="Payment" subtitle="Complete your purchase" backHref={backHref} />
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-8 lg:mx-auto lg:grid lg:w-full lg:max-w-[1100px] lg:grid-cols-[.8fr_1.2fr] lg:items-start lg:gap-8 lg:px-0 lg:pt-8">
         <Card className="px-4 py-4">
           <p className="text-[14px] font-bold text-[#1a1a1a]">Order Summary</p>
           <div className="mt-3 space-y-1">
@@ -84,9 +84,9 @@ export function PaymentScreen({ backHref, payHref }: PaymentScreenProps) {
           </div>
         </Card>
 
-        <div className="mt-5">
+        <div className="mt-5 lg:mt-0">
           <p className="text-[14px] font-bold text-[#161616]">Payment Method</p>
-          <div className="mt-3 space-y-3">
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <MethodCard
               icon={CardIcon}
               title="Card"
@@ -98,7 +98,7 @@ export function PaymentScreen({ backHref, payHref }: PaymentScreenProps) {
           </div>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-5 lg:col-start-1 lg:row-start-2">
           <Button className="w-full" href={payHref}>
             Pay NGN 3,200
           </Button>

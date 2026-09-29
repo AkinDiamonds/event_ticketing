@@ -39,15 +39,15 @@ type MyOrdersScreenProps = {
 
 export function MyOrdersScreen({ backHref }: MyOrdersScreenProps) {
   return (
-    <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
+    <div className="flex min-h-dvh flex-col bg-[#fbfaf7] lg:bg-[#f4f7f3]">
       <TopBar title="My Orders" backHref={backHref} homeRef='/' />
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
-        <div className="grid grid-cols-2 rounded-[0.5rem] bg-[#f4f1ea] p-1 text-center text-[12px] font-semibold text-[#6f695e]">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-3 md:px-8 lg:px-14 lg:pt-7">
+        <div className="grid max-w-[460px] grid-cols-2 rounded-[0.5rem] bg-[#f4f1ea] p-1 text-center text-[12px] font-semibold text-[#6f695e]">
           <div className="rounded-[14px] bg-white py-2 text-[#171717] shadow-sm">Upcoming</div>
           <div className="py-2">Past</div>
         </div>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           <OrderEntry
             title="Tech Summit 2026"
             date="Oct 24, 2026 • 09:00 AM"

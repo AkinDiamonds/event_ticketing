@@ -12,6 +12,7 @@ import OrdersPage from './pages/orders'
 import ProfilePage from './pages/profile'
 import AdminEventsPage from './pages/admin/events'
 import AdminTicketsPage from './pages/admin/tickets'
+import AuthPage from './pages/auth'
 
 export type RouteModule = {
   path: string
@@ -20,6 +21,12 @@ export type RouteModule = {
 
 export const routes: RouteModule[] = [
   { path: '/', component: HomePage },
+  { path: '/login', component: AuthPage },
+  { path: '/register', component: AuthPage },
+  { path: '/verify-email', component: AuthPage },
+  { path: '/forgot-password', component: AuthPage },
+  { path: '/reset-password', component: AuthPage },
+  { path: '/password-reset-success', component: AuthPage },
   { path: '/tickets', component: TicketsPage },
   { path: '/tickets/:id', component: TicketDetailPage },
   { path: '/tickets/:id/select', component: TicketSelectPage },

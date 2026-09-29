@@ -100,7 +100,7 @@ export function TicketCard({
   venue,
 }: TicketCardProps) {
   return (
-    <Card className="relative bg-white w-[18rem] mx-auto">
+    <Card className="relative mx-auto w-full max-w-[390px] bg-white md:max-w-[640px] xl:max-w-[760px]">
       <div className="rounded-full absolute left-[-1.2rem] w-8 h-8 bg-white  top-[6rem]   z-[9999]"></div>
       <div className="rounded-full absolute left-[-1.4rem] w-8 h-8 bg-white  top-[9.2rem]   z-[9999]"></div>
 
@@ -109,7 +109,7 @@ export function TicketCard({
 
       <EventBanner title={title} subtitle="Your digital ticket is ready for entry." />
       <div className="px-4 py-4">
-        <div className="grid grid-cols-[1fr] gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_.8fr] md:gap-5">
           <div className="space-y-3">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#938a7d]">

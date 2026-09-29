@@ -13,7 +13,8 @@ export function EventDetailsScreen({ backHref, continueHref }: EventDetailsScree
   return (
     <div className="flex min-h-dvh flex-col bg-[#fbfaf7]">
       <TopBar backHref={backHref} homeRef='/'/>
-      <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-2 md:px-8 lg:mx-auto lg:grid lg:w-full lg:max-w-[1280px] lg:grid-cols-[1.1fr_.9fr] lg:items-start lg:gap-10 lg:px-0 lg:pt-8">
+        <div>
         <EventBanner
           title="TECH SUMMIT 2026"
           subtitle="The biggest gathering of tech enthusiasts, innovators and industry leaders."
@@ -45,8 +46,10 @@ export function EventDetailsScreen({ backHref, continueHref }: EventDetailsScree
             </CardInset>
           ))}
         </div>
+        </div>
 
-        <div className="mt-6">
+        <section className="mt-7 rounded-[26px] border border-[#e9eee9] bg-white p-4 shadow-[0_18px_55px_rgba(18,50,31,.05)] lg:sticky lg:top-8 lg:mt-0 lg:p-6">
+        <div>
           <h3 className="text-[15px] font-bold text-[#141414]">Choose Your Ticket</h3>
           <p className="mt-1 text-[12px] text-[#7e776d]">Select a ticket type to continue</p>
         </div>
@@ -73,6 +76,7 @@ export function EventDetailsScreen({ backHref, continueHref }: EventDetailsScree
             Select Ticket
           </Button>
         </div>
+        </section>
       </div>
     </div>
   )

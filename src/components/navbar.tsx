@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import { useState } from 'react'
 import { useRouter } from '../router'
 import { BackIcon, LogoMark, MenuIcon, ShareIcon } from './icons'
 import { cn } from '../lib/cn'
@@ -23,13 +24,21 @@ export function TopBar({
   homeRef
 }: TopBarProps) {
   const { navigate } = useRouter()
+  const [menuOpen, setMenuOpen] = useState(false)
   const tone = variant === 'dark' ? 'text-white' : 'text-[#101010]'
   const iconTone = variant === 'dark' ? 'text-white/90' : 'text-[#1b1b1b]'
+  const menuLinks = [
+    { label: 'Browse events', href: '/tickets' },
+    { label: 'My tickets', href: '/my-ticket' },
+    { label: 'My orders', href: '/orders' },
+    { label: 'Profile', href: '/profile' },
+  ]
 
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-4 pt-4',
+        'relative z-30 flex items-center justify-between px-4 pt-4',
+        variant === 'dark' && 'bg-[#092619] pb-3',
         tone,
       )}
     >
@@ -106,26 +115,37 @@ export function TopBar({
           </a>
         ) : null}
         {menuHref ? (
-          <a
-            href={menuHref}
-            aria-label="Menu"
-            onClick={(event) => {
-              if (
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey ||
-                event.button !== 0
-              ) {
-                return
-              }
-              event.preventDefault()
-              navigate(menuHref)
-            }}
-            className="grid h-9 w-9 place-items-center rounded-full transition hover:bg-black/5"
-          >
-            <MenuIcon className={cn('h-5 w-5', iconTone)} />
-          </a>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+              className="grid h-9 w-9 place-items-center rounded-full transition hover:bg-black/5"
+            >
+              {menuOpen ? <span className={cn('text-2xl leading-none', iconTone)}>×</span> : <MenuIcon className={cn('h-5 w-5', iconTone)} />}
+            </button>
+            {menuOpen ? (
+              <div className="absolute right-0 top-11 z-50 w-56 rounded-2xl border border-[#e7ece8] bg-white p-2 text-[#17231b] shadow-[0_18px_50px_rgba(10,35,20,.18)]">
+                <nav aria-label="Main menu" className="space-y-0.5">
+                  {menuLinks.map((link) => (
+                    <button
+                      key={link.href}
+                      type="button"
+                      onClick={() => { setMenuOpen(false); navigate(link.href) }}
+                      className="w-full rounded-xl px-3 py-2.5 text-left text-[13px] font-medium transition hover:bg-[#f1f7f3]"
+                    >
+                      {link.label}
+                    </button>
+                  ))}
+                </nav>
+                <div className="mt-2 grid grid-cols-2 gap-2 border-t border-[#edf0ed] pt-2">
+                  <button type="button" onClick={() => { setMenuOpen(false); navigate('/login') }} className="rounded-lg border border-[#c9ddcf] px-2 py-2 text-[12px] font-semibold text-[#006b37] hover:bg-[#f1f7f3]">Log in</button>
+                  <button type="button" onClick={() => { setMenuOpen(false); navigate('/register') }} className="rounded-lg bg-[#006b37] px-2 py-2 text-[12px] font-semibold text-white hover:bg-[#00572d]">Sign up</button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </div>
@@ -147,7 +167,7 @@ export function BottomNav({ items }: BottomNavProps) {
   const { pathname, navigate } = useRouter()
 
   return (
-    <div className="border-t border-[#ece8df] bg-white px-2 py-2">
+    <div className="border-t border-[#ece8df] bg-white px-2 py-2 md:hidden">
       <div className="grid grid-cols-4 gap-1">
         {items.map((item) => {
           const Icon = item.icon

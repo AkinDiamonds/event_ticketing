@@ -45,17 +45,17 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: CmsEventsScree
   return (
     <div className="flex min-h-dvh flex-col bg-[#f5f7f3]">
       <TopBar variant="dark" backHref={backHref} />
-      <div className="px-4 pb-3 pt-2">
+      <div className="px-4 pb-3 pt-2 md:px-8 lg:px-14 lg:pt-7">
         <div className="flex items-center justify-between">
-          <h2 className="text-[18px] font-bold text-[#f7faf8]">Events</h2>
+          <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#678071]">Organizer workspace</p><h2 className="mt-1 text-[22px] font-bold text-[#143722] md:text-[28px]">Your events</h2></div>
           <Button variant="primary" size="sm">
             + New Event
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 md:px-8 lg:px-14">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           <CmsEvent title="Tech Summit 2026" date="Oct 24, 2026" tickets="1000 tickets" status="Published" />
           <CmsEvent title="Freshers' Welcome Week" date="Nov 10, 2026" tickets="500 tickets" status="Published" />
           <CmsEvent title="Entrepreneurship Conf." date="Nov 28, 2026" tickets="800 tickets" status="Draft" />
@@ -63,8 +63,8 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: CmsEventsScree
         </div>
 
         <div className="mt-6 flex justify-center gap-3">
-          <a href={ticketSettingsHref} className="text-[13px] font-semibold text-[#1f6b42]">
-            Ticket Settings
+          <a href={ticketSettingsHref} className="rounded-full border border-[#c9ddcf] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#1f6b42] shadow-sm hover:bg-[#f7fbf8]">
+            Manage ticket types →
           </a>
         </div>
       </div>
