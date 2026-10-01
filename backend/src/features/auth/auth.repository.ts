@@ -119,6 +119,17 @@ export async function updatePassword(userId: string, passwordHash: string): Prom
     .where(eq(users.id, userId));
 }
 
+export async function updateWhatsappNumber(userId: string, whatsappNumber: string | null) {
+  await getDb()
+    .update(users)
+    .set({
+      whatsappNumber,
+      whatsappSetAt: whatsappNumber !== null ? new Date() : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
 export async function insertRefreshToken(input: {
   userId: string;
   token: string;

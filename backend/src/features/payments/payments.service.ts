@@ -9,6 +9,9 @@ import {
   updateOrderStatus,
   type TicketInsert,
 } from "#features/orders/orders.repository.js";
+import { findUserById } from "#features/auth/index.js";
+import { findEventById } from "#features/events/index.js";
+import { sendTicketEmail, sendTicketWhatsApp } from "#features/notifications/index.js";
 
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
@@ -139,6 +142,26 @@ export async function handleChargeSuccess(reference: string): Promise<void> {
     );
     // Leave order as pending so a retry can attempt fulfillment again.
     // Do not mark as payment_exception unless we are certain money was lost.
+    return;
+  }
+
+  const buyer = await findUserById(order.buyerId);
+  if (buyer) {
+    const event = await findEventById(order.eventId);
+    const eventTitle = event?.title ?? "Your Event";
+    const ticketCodes = ticketsToInsert.map((t) => t.code);
+
+    await sendTicketEmail({
+      to: buyer.email,
+      eventTitle,
+      ticketCodes,
+    });
+
+    await sendTicketWhatsApp({
+      phone: buyer.whatsappNumber,
+      eventTitle,
+      ticketCodes,
+    });
   }
 }
 

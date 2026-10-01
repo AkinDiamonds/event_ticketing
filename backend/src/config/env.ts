@@ -63,6 +63,13 @@ if (!rawResult.success) {
 
 const parsed = rawResult.data;
 
+if (parsed.WHATSAPP_ENABLED && (!parsed.WHATSAPP_API_TOKEN || !parsed.WHATSAPP_PHONE_NUMBER_ID)) {
+  console.error(
+    "\n[startup] WHATSAPP_ENABLED is true but WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID is missing\n"
+  );
+  process.exit(1);
+}
+
 export const env = {
   ...parsed,
   corsOrigins: parsed.CORS_ORIGINS.split(",").map((s) => s.trim()),

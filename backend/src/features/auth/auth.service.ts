@@ -26,6 +26,7 @@ import {
   insertRefreshToken,
   insertUser,
   rotateRefreshToken,
+  updateWhatsappNumber,
   type User,
 } from "./auth.repository.js";
 import type {
@@ -33,6 +34,7 @@ import type {
   LoginInput,
   RegisterInput,
   ResetPasswordInput,
+  SetWhatsAppInput,
   VerifyEmailInput,
 } from "./auth.schemas.js";
 
@@ -240,17 +242,40 @@ export async function resetPassword(input: ResetPasswordInput): Promise<void> {
   });
 }
 
+export async function setWhatsAppNumber(
+  userId: string,
+  input: SetWhatsAppInput
+): Promise<void> {
+  const user = await findUserById(userId);
+  if (!user) {
+    throw new UnauthorizedError("User not found");
+  }
+
+  try {
+    await updateWhatsappNumber(userId, input.whatsappNumber);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictError("WhatsApp number is already registered to another account");
+    }
+    throw error;
+  }
+}
+
 function publicUser(user: User) {
   return {
     id: user.id,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
     isOrganizer: user.isOrganizer,
+    whatsappNumber: user.whatsappNumber,
   };
 }
 
 function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && "code" in error && error.code === "23505"
-  );
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === "23505") return true;
+  // Drizzle may wrap the pg DatabaseError in an outer error via error.cause
+  if ("cause" in error) return isUniqueViolation((error as { cause: unknown }).cause);
+  return false;
 }
+

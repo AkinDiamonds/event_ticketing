@@ -10,8 +10,13 @@ import { events, ticketTiers } from "#features/events/events.schema.js";
 import { orders, orderItems, tickets } from "#features/orders/orders.schema.js";
 import { createOrderWithReservation } from "#features/orders/orders.repository.js";
 import { handleChargeSuccess, verifyWebhookSignature } from "./payments.service.js";
+import { MemoryEmailSender } from "#shared/utils/email.js";
+import { MemoryWhatsAppSender } from "#shared/utils/whatsapp.js";
+import { setEmailSender, setWhatsAppSender } from "#features/notifications/index.js";
 
 const app = createApp();
+const memoryEmail = new MemoryEmailSender();
+const memoryWhatsApp = new MemoryWhatsAppSender();
 
 function generateSignature(payload: string): string {
   return createHmac("sha512", env.PAYSTACK_SECRET_KEY).update(payload).digest("hex");
@@ -26,6 +31,10 @@ function mockFetchJson(data: unknown): Response {
 
 beforeEach(async () => {
   vi.restoreAllMocks();
+  memoryEmail.messages.length = 0;
+  memoryWhatsApp.messages.length = 0;
+  setEmailSender(memoryEmail);
+  setWhatsAppSender(memoryWhatsApp);
   await getDb().delete(tickets);
   await getDb().delete(orderItems);
   await getDb().delete(orders);
@@ -195,6 +204,53 @@ describe("handleChargeSuccess fulfillment", () => {
       expect(t.code).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/);
       expect(t.status).toBe("valid");
     }
+
+    // Ticket email must be dispatched to the buyer after successful fulfillment
+    expect(memoryEmail.messages).toHaveLength(1);
+    const emailSent = memoryEmail.messages[0]!;
+    expect(emailSent.to).toBe(fixture.user.email);
+    expect(emailSent.subject).toContain(fixture.event.title);
+    expect(emailSent.text).toContain(createdTickets[0]!.code);
+  });
+
+  it("sends a ticket email for each ticket code after fulfillment", async () => {
+    const fixture = await setupPendingOrderFixture({ price: 500000, quantity: 3 });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      mockFetchJson({
+        status: true,
+        data: { status: "success", amount: fixture.totalKobo },
+      })
+    );
+
+    await handleChargeSuccess(fixture.ref);
+
+    expect(memoryEmail.messages).toHaveLength(1);
+    const msg = memoryEmail.messages[0]!;
+    // All 3 ticket codes must appear in the email body
+    const createdTickets = await getDb()
+      .select()
+      .from(tickets)
+      .where(eq(tickets.orderId, fixture.order.id));
+    for (const t of createdTickets) {
+      expect(msg.text).toContain(t.code);
+    }
+  });
+
+  it("does not send any notification when payment verification fails (amount mismatch)", async () => {
+    const fixture = await setupPendingOrderFixture({ price: 500000, quantity: 2 });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      mockFetchJson({
+        status: true,
+        data: { status: "success", amount: 100 },
+      })
+    );
+
+    await handleChargeSuccess(fixture.ref);
+
+    expect(memoryEmail.messages).toHaveLength(0);
+    expect(memoryWhatsApp.messages).toHaveLength(0);
   });
 
   it("is idempotent on duplicate webhook delivery", async () => {
@@ -248,6 +304,9 @@ describe("handleChargeSuccess fulfillment", () => {
       .from(tickets)
       .where(eq(tickets.orderId, fixture.order.id));
     expect(createdTickets).toHaveLength(0);
+
+    // No notifications should be sent when payment is rejected
+    expect(memoryEmail.messages).toHaveLength(0);
   });
 
   it("marks order as payment_exception if payment verified after reservation expiry", async () => {
@@ -277,5 +336,8 @@ describe("handleChargeSuccess fulfillment", () => {
       .from(tickets)
       .where(eq(tickets.orderId, fixture.order.id));
     expect(createdTickets).toHaveLength(0);
+
+    // No notifications should be sent when reservation has expired
+    expect(memoryEmail.messages).toHaveLength(0);
   });
 });

@@ -10,6 +10,7 @@ import {
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
+  setWhatsAppSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
 import * as authController from "./auth.controller.js";
@@ -57,6 +58,13 @@ router.post(
   "/reset-password",
   validate({ body: resetPasswordSchema }),
   authController.resetPassword
+);
+router.patch(
+  "/me/whatsapp",
+  authenticate,
+  authRateLimiter,
+  validate({ body: setWhatsAppSchema }),
+  authController.setWhatsAppNumber
 );
 
 export default router;
