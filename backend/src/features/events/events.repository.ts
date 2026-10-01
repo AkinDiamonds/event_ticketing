@@ -317,7 +317,7 @@ export async function deleteTier(
   });
 }
 
-async function findEventById(eventId: string): Promise<Event | undefined> {
+export async function findEventById(eventId: string): Promise<Event | undefined> {
   const [event] = await getDb().select().from(events).where(eq(events.id, eventId)).limit(1);
   return event;
 }

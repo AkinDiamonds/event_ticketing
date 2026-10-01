@@ -8,6 +8,7 @@ import {
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
+  setWhatsAppSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
 
@@ -57,3 +58,10 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   await authService.resetPassword(resetPasswordSchema.parse(req.body));
   sendSuccess(res, null, "Password reset successfully");
 }
+
+export async function setWhatsAppNumber(req: Request, res: Response): Promise<void> {
+  const input = setWhatsAppSchema.parse(req.body);
+  await authService.setWhatsAppNumber(req.user!.userId, input);
+  sendSuccess(res, null, "WhatsApp number updated successfully");
+}
+

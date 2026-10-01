@@ -5,6 +5,7 @@ import {
   refreshSchema,
   registerSchema,
   resetPasswordSchema,
+  setWhatsAppSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
 
@@ -25,6 +26,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry): void {
   registry.register("RefreshRequest", refreshSchema);
   registry.register("ForgotPasswordRequest", forgotPasswordSchema);
   registry.register("ResetPasswordRequest", resetPasswordSchema);
+  registry.register("SetWhatsAppRequest", setWhatsAppSchema);
 
   registry.registerPath({
     method: "post",
@@ -88,6 +90,13 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry): void {
     path: "/api/v1/auth/logout-all",
     security: [{ bearerAuth: [] }],
     responses: { 200: { description: "Logged out everywhere" } },
+  });
+  registry.registerPath({
+    method: "patch",
+    path: "/api/v1/auth/me/whatsapp",
+    security: [{ bearerAuth: [] }],
+    request: { body: { content: { "application/json": { schema: setWhatsAppSchema } } } },
+    responses: { 200: { description: "WhatsApp number updated" } },
   });
 
   registry.registerComponent("securitySchemes", "bearerAuth", {

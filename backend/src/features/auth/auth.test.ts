@@ -312,3 +312,112 @@ describe("password reset", () => {
     expect(oldTokenRefresh.status).toBe(401);
   });
 });
+
+// ── PATCH /api/v1/auth/me/whatsapp ───────────────────────────────────────────
+
+describe("PATCH /api/v1/auth/me/whatsapp", () => {
+  async function registerAndLogin() {
+    const registration = await request(app).post("/api/v1/auth/register").send({
+      email: "student@example.com",
+      password: "correct horse battery staple",
+    });
+    const { accessToken } = authBody(registration).data;
+    if (!accessToken) throw new Error("No access token after registration");
+    return accessToken;
+  }
+
+  it("requires authentication", async () => {
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .send({ whatsappNumber: "+2348012345678" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an invalid phone number format", async () => {
+    const token = await registerAndLogin();
+
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ whatsappNumber: "08012345678" }); // missing leading +country code
+
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects a missing body", async () => {
+    const token = await registerAndLogin();
+
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(422);
+  });
+
+  it("sets a valid E.164 WhatsApp number for the authenticated user", async () => {
+    const token = await registerAndLogin();
+
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ whatsappNumber: "+2348012345678" });
+
+    expect(res.status).toBe(200);
+    expect(authBody(res).message).toContain("updated");
+
+    // Confirm the number is persisted in the DB
+    const [dbUser] = await getDb().select().from(users).limit(1);
+    expect(dbUser?.whatsappNumber).toBe("+2348012345678");
+    expect(dbUser?.whatsappSetAt).toBeDefined();
+  });
+
+  it("clears the WhatsApp number when null is supplied", async () => {
+    const token = await registerAndLogin();
+
+    // First, set a number
+    await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ whatsappNumber: "+2348012345678" });
+
+    // Now clear it
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ whatsappNumber: null });
+
+    expect(res.status).toBe(200);
+
+    const [dbUser] = await getDb().select().from(users).limit(1);
+    expect(dbUser?.whatsappNumber).toBeNull();
+    expect(dbUser?.whatsappSetAt).toBeNull();
+  });
+
+  it("rejects a duplicate WhatsApp number already registered to another account", async () => {
+    // Register first user and set the number
+    const token1 = await registerAndLogin();
+    await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token1}`)
+      .send({ whatsappNumber: "+2348012345678" });
+
+    // Register second user
+    const reg2 = await request(app).post("/api/v1/auth/register").send({
+      email: "student2@example.com",
+      password: "correct horse battery staple",
+    });
+    const token2 = authBody(reg2).data.accessToken;
+    if (!token2) throw new Error("No access token for second user");
+
+    // Attempt to set the same number
+    const res = await request(app)
+      .patch("/api/v1/auth/me/whatsapp")
+      .set("Authorization", `Bearer ${token2}`)
+      .send({ whatsappNumber: "+2348012345678" });
+
+    expect(res.status).toBe(409);
+  });
+});
+
