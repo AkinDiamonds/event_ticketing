@@ -11,7 +11,7 @@ let _db: NodePgDatabase<typeof schema> | null = null;
 
 export function getPool(): Pool {
   if (!_pool) {
-    _pool = new Pool({ connectionString: env.DATABASE_URL });
+    _pool = new Pool({ connectionString: env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
     _pool.on("connect", () => {
       logger.debug("PostgreSQL connection established");
