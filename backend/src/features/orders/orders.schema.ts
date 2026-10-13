@@ -12,7 +12,7 @@ export const orderStatusEnum = pgEnum("order_status", [
 export const ticketStatusEnum = pgEnum("ticket_status", ["valid", "used"]);
 
 export const orders = pgTable("orders", {
-  id: uuid().defaultRandom().primaryKey(),
+  id: uuid("id").defaultRandom().primaryKey(),
   buyerId: uuid("buyer_id")
     .notNull()
     .references(() => users.id),
@@ -29,7 +29,7 @@ export const orders = pgTable("orders", {
 });
 
 export const orderItems = pgTable("order_items", {
-  id: uuid().primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
   orderId: uuid("order_id")
     .notNull()
     .references(() => orders.id),
@@ -42,7 +42,7 @@ export const orderItems = pgTable("order_items", {
 });
 
 export const tickets = pgTable("tickets", {
-  id: uuid().defaultRandom().primaryKey(),
+  id: uuid("id").defaultRandom().primaryKey(),
   orderId: uuid("order_id")
     .notNull()
     .references(() => orders.id),

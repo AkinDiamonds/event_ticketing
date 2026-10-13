@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction, ErrorRequestHandler } from "express";
+import { ZodError } from "zod";
 import { AppError } from "#shared/utils/errors.js";
 import { sendError } from "#shared/utils/response.js";
 import logger from "#shared/utils/logger.js";
@@ -9,6 +10,12 @@ export const errorHandler: ErrorRequestHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
+  if (err instanceof ZodError) {
+    logger.warn("Unhandled ZodError reached error handler", { issues: err.issues });
+    sendError(res, "Validation failed", 422, err.issues);
+    return;
+  }
+
   if (err instanceof AppError) {
     // Known, intentional error — log at warn level, return the structured payload.
     logger.warn(err.message, { statusCode: err.statusCode });

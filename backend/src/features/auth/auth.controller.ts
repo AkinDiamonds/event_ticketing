@@ -2,28 +2,27 @@ import type { Request, Response } from "express";
 import { sendSuccess } from "#shared/utils/response.js";
 import * as authService from "./auth.service.js";
 import {
-  forgotPasswordSchema,
-  loginSchema,
-  logoutSchema,
-  refreshSchema,
-  registerSchema,
-  resetPasswordSchema,
-  setWhatsAppSchema,
-  verifyEmailSchema,
+  type RegisterInput,
+  type LoginInput,
+  type VerifyEmailInput,
+  type RefreshInput,
+  type ForgotPasswordInput,
+  type ResetPasswordInput,
+  type SetWhatsAppInput,
 } from "./auth.schemas.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
-  const result = await authService.register(registerSchema.parse(req.body));
+  const result = await authService.register(req.body as RegisterInput);
   sendSuccess(res, result, "Registration successful", 201);
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const result = await authService.login(loginSchema.parse(req.body));
+  const result = await authService.login(req.body as LoginInput);
   sendSuccess(res, result, "Login successful");
 }
 
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
-  await authService.verifyEmail(verifyEmailSchema.parse(req.body));
+  await authService.verifyEmail(req.body as VerifyEmailInput);
   sendSuccess(res, null, "Email verified successfully");
 }
 
@@ -33,13 +32,13 @@ export async function resendVerification(req: Request, res: Response): Promise<v
 }
 
 export async function refresh(req: Request, res: Response): Promise<void> {
-  const { refreshToken } = refreshSchema.parse(req.body);
+  const { refreshToken } = req.body as RefreshInput;
   const result = await authService.refresh(refreshToken);
   sendSuccess(res, result, "Token refreshed");
 }
 
 export async function logout(req: Request, res: Response): Promise<void> {
-  const { refreshToken } = logoutSchema.parse(req.body);
+  const { refreshToken } = req.body as RefreshInput;
   await authService.logout(refreshToken);
   sendSuccess(res, null, "Logged out successfully");
 }
@@ -50,17 +49,17 @@ export async function logoutAll(req: Request, res: Response): Promise<void> {
 }
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
-  await authService.forgotPassword(forgotPasswordSchema.parse(req.body));
+  await authService.forgotPassword(req.body as ForgotPasswordInput);
   sendSuccess(res, null, "If the email exists, a reset link has been sent");
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
-  await authService.resetPassword(resetPasswordSchema.parse(req.body));
+  await authService.resetPassword(req.body as ResetPasswordInput);
   sendSuccess(res, null, "Password reset successfully");
 }
 
 export async function setWhatsAppNumber(req: Request, res: Response): Promise<void> {
-  const input = setWhatsAppSchema.parse(req.body);
+  const input = req.body as SetWhatsAppInput;
   await authService.setWhatsAppNumber(req.user!.userId, input);
   sendSuccess(res, null, "WhatsApp number updated successfully");
 }
