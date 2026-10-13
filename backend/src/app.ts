@@ -19,6 +19,8 @@ import paymentsRouter from "#features/payments/payments.routes.js";
 export function createApp(): Application {
   const app = express();
 
+  app.set("trust proxy", 1);
+
   // ── Core middleware ──────────────────────────────────────────────────────
   app.use(
     cors({
