@@ -20,7 +20,7 @@ export const orders = pgTable("orders", {
     .notNull()
     .references(() => events.id),
   totalKobo: integer("total_kobo").notNull(),
-  status: orderStatusEnum().notNull().default("pending"),
+  status: orderStatusEnum("status").notNull().default("pending"),
   paystackReference: varchar("paystack_reference", { length: 100 }).notNull().unique(),
   reservationExpiresAt: timestamp("reservation_expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -36,7 +36,7 @@ export const orderItems = pgTable("order_items", {
   ticketTierId: uuid("ticket_tier_id")
     .notNull()
     .references(() => ticketTiers.id),
-  quantity: integer().notNull(),
+  quantity: integer("quantity").notNull(),
   unitPriceKobo: integer("unit_price_kobo").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -49,8 +49,8 @@ export const tickets = pgTable("tickets", {
   ticketTierId: uuid("ticket_tier_id")
     .notNull()
     .references(() => ticketTiers.id),
-  code: varchar({ length: 6 }).notNull().unique(),
-  status: ticketStatusEnum().notNull().default("valid"),
+  code: varchar("code", { length: 6 }).notNull().unique(),
+  status: ticketStatusEnum("status").notNull().default("valid"),
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
