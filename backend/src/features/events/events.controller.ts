@@ -10,7 +10,9 @@ import {
 } from "./events.schemas.js";
 
 export async function listEvents(req: Request, res: Response): Promise<void> {
-  const result = await eventsService.listEvents(req.query as ListEventsQuery);
+  const result = await eventsService.listEvents(
+    req.query as unknown as ListEventsQuery
+  );
   sendSuccess(res, result, "Events retrieved successfully");
 }
 
