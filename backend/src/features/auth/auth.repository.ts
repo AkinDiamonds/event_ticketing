@@ -99,16 +99,46 @@ export async function markEmailVerified(userId: string): Promise<void> {
 export async function completeEmailVerification(
   userId: string,
   tokenId: string
-): Promise<void> {
-  await getDb().transaction(async (tx) => {
-    await tx
+): Promise<User> {
+  return getDb().transaction(async (tx) => {
+    const [user] = await tx
       .update(users)
       .set({ isEmailVerified: true, updatedAt: new Date() })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!user) {
+      throw new Error("User not found during verification");
+    }
+
     await tx
       .update(emailVerificationTokens)
       .set({ usedAt: new Date() })
       .where(eq(emailVerificationTokens.id, tokenId));
+
+    return user;
+  });
+}
+
+export async function resetUnverifiedUser(
+  userId: string,
+  passwordHash: string
+): Promise<User> {
+  return getDb().transaction(async (tx) => {
+    const [user] = await tx
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!user) {
+      throw new Error("User not found during reset");
+    }
+
+    await tx.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
+    await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, userId));
+
+    return user;
   });
 }
 

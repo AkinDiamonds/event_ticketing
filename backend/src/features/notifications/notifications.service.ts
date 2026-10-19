@@ -2,6 +2,7 @@ import { NoopEmailSender, type EmailSender } from "#shared/utils/email.js";
 import { NoopWhatsAppSender, type WhatsAppSender } from "#shared/utils/whatsapp.js";
 import { env } from "#config/env.js";
 import logger from "#shared/utils/logger.js";
+import { buildTicketEmail } from "./email.templates.js";
 
 let emailSender: EmailSender = new NoopEmailSender();
 let whatsappSender: WhatsAppSender = new NoopWhatsAppSender();
@@ -28,15 +29,8 @@ export interface TicketWhatsAppPayload {
 
 export async function sendTicketEmail(payload: TicketEmailPayload): Promise<void> {
   try {
-    const text = `Congratulations! Your purchase for "${payload.eventTitle}" was successful.\n\nYour Ticket Code(s):\n${payload.ticketCodes
-      .map((code, index) => `${index + 1}. ${code}`)
-      .join("\n")}\n\nPlease present these codes at the event venue.`;
-
-    await emailSender.send({
-      to: payload.to,
-      subject: `Your Tickets for ${payload.eventTitle}`,
-      text,
-    });
+    const message = buildTicketEmail(payload.to, payload.eventTitle, payload.ticketCodes);
+    await emailSender.send(message);
   } catch (error) {
     logger.warn("Ticket email delivery failed", { error, to: payload.to });
   }

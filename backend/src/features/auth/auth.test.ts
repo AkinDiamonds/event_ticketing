@@ -18,6 +18,7 @@ const emailSender = new MemoryEmailSender();
 
 interface AuthResponseBody {
   data: {
+    email?: string;
     accessToken?: string;
     refreshToken?: string;
     user?: Record<string, unknown>;
@@ -64,33 +65,49 @@ afterAll(async () => {
 });
 
 describe("POST /api/v1/auth/register", () => {
-  it("registers a user and sends a verification email", async () => {
+  it("registers a user, sends verification email, but withholds tokens", async () => {
     const response = await request(app).post("/api/v1/auth/register").send({
       email: "student@example.com",
       password: "correct horse battery staple",
     });
 
     expect(response.status).toBe(201);
-    expect(authBody(response).data.user).toMatchObject({
-      email: "student@example.com",
-      isEmailVerified: false,
-      isOrganizer: false,
-    });
-    expect(authBody(response).data.user?.passwordHash).toBeUndefined();
+    expect(authBody(response).data.email).toBe("student@example.com");
+    expect(authBody(response).data.accessToken).toBeUndefined();
     expect(emailSender.messages).toHaveLength(1);
+    expect(emailSender.messages[0]?.subject).toContain("Verify your email");
   });
 
-  it("rejects a duplicate email", async () => {
-    const input = {
-      email: "student@example.com",
-      password: "correct horse battery staple",
+  it("allows re-registering an unverified email (anti-squatting protection)", async () => {
+    const input1 = {
+      email: "squatted@example.com",
+      password: "first password",
+    };
+    const input2 = {
+      email: "squatted@example.com",
+      password: "second real password",
     };
 
-    await request(app).post("/api/v1/auth/register").send(input);
-    const response = await request(app).post("/api/v1/auth/register").send(input);
+    // First unverified attempt
+    const firstRes = await request(app).post("/api/v1/auth/register").send(input1);
+    expect(firstRes.status).toBe(201);
 
-    expect(response.status).toBe(409);
-    expect(authBody(response).message).toBe("Email is already registered");
+    // Second registration attempt for unverified email should succeed and refresh token
+    const secondRes = await request(app).post("/api/v1/auth/register").send(input2);
+    expect(secondRes.status).toBe(201);
+    expect(emailSender.messages).toHaveLength(2);
+
+    // Verify with the latest token
+    const latestToken = emailSender.messages[1]?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    expect(latestToken).toBeDefined();
+
+    const verifyRes = await request(app).post("/api/v1/auth/verify-email").send({ token: latestToken });
+    expect(verifyRes.status).toBe(200);
+
+    // Now verified: subsequent register attempt must be rejected with 409
+    const thirdRes = await request(app).post("/api/v1/auth/register").send(input2);
+    expect(thirdRes.status).toBe(409);
+    expect(authBody(thirdRes).message).toBe("Email is already registered");
   });
 
   it("rejects invalid input", async () => {
@@ -104,23 +121,35 @@ describe("POST /api/v1/auth/register", () => {
 });
 
 describe("login and email verification", () => {
-  it("logs in with the correct password and rejects a wrong password", async () => {
+  it("prevents login before email verification and permits after", async () => {
     const input = {
       email: "student@example.com",
       password: "correct horse battery staple",
     };
     await request(app).post("/api/v1/auth/register").send(input);
 
+    // Login before verification is forbidden (403)
+    const unverifiedLogin = await request(app).post("/api/v1/auth/login").send(input);
+    expect(unverifiedLogin.status).toBe(403);
+    expect(authBody(unverifiedLogin).message).toContain("verify your email");
+
+    // Verify email using token from email
+    const token = emailSender.messages[0]?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const verifyRes = await request(app).post("/api/v1/auth/verify-email").send({ token });
+    expect(verifyRes.status).toBe(200);
+    expect(authBody(verifyRes).data.accessToken).toEqual(expect.any(String));
+
+    // Login after verification succeeds (200)
     const login = await request(app).post("/api/v1/auth/login").send(input);
+    expect(login.status).toBe(200);
+    expect(authBody(login).data.accessToken).toEqual(expect.any(String));
+
     const wrongPassword = await request(app)
       .post("/api/v1/auth/login")
       .send({
         ...input,
         password: "incorrect password",
       });
-
-    expect(login.status).toBe(200);
-    expect(authBody(login).data.accessToken).toEqual(expect.any(String));
     expect(wrongPassword.status).toBe(401);
   });
 
@@ -129,43 +158,18 @@ describe("login and email verification", () => {
       email: "student@example.com",
       password: "correct horse battery staple",
     });
-    const message = emailSender.messages[0];
-    const token = message?.text.split(": ")[1];
+    const token = emailSender.messages[0]?.text.match(/[a-f0-9]{32,}/i)?.[0];
 
     const response = await request(app).post("/api/v1/auth/verify-email").send({ token });
 
     expect(response.status).toBe(200);
+    expect(authBody(response).data.user?.isEmailVerified).toBe(true);
   });
 
   it("requires authentication to resend verification", async () => {
     const response = await request(app).post("/api/v1/auth/resend-verification").send();
 
     expect(response.status).toBe(401);
-  });
-
-  it("resends verification and invalidates the previous token", async () => {
-    const registration = await request(app).post("/api/v1/auth/register").send({
-      email: "student@example.com",
-      password: "correct horse battery staple",
-    });
-    const accessToken = authBody(registration).data.accessToken;
-    const firstToken = emailSender.messages[0]?.text.split(": ")[1];
-    if (!accessToken || !firstToken) {
-      throw new Error("Registration did not create verification credentials");
-    }
-
-    const resend = await request(app)
-      .post("/api/v1/auth/resend-verification")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send();
-    const secondToken = emailSender.messages[1]?.text.split(": ")[1];
-    const oldTokenAttempt = await request(app)
-      .post("/api/v1/auth/verify-email")
-      .send({ token: firstToken });
-
-    expect(resend.status).toBe(200);
-    expect(secondToken).toBeDefined();
-    expect(oldTokenAttempt.status).toBe(401);
   });
 
   it("keeps registration successful when email delivery fails", async () => {
@@ -183,16 +187,19 @@ describe("login and email verification", () => {
 });
 
 describe("refresh and logout", () => {
-  it("rotates refresh tokens and rejects the old token", async () => {
-    const input = {
-      email: "student@example.com",
+  async function registerAndVerify(email = "student@example.com") {
+    await request(app).post("/api/v1/auth/register").send({
+      email,
       password: "correct horse battery staple",
-    };
-    const registration = await request(app).post("/api/v1/auth/register").send(input);
-    const oldRefreshToken = authBody(registration).data.refreshToken;
-    if (!oldRefreshToken) {
-      throw new Error("Registration did not return a refresh token");
-    }
+    });
+    const token = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const verify = await request(app).post("/api/v1/auth/verify-email").send({ token });
+    return authBody(verify).data;
+  }
+
+  it("rotates refresh tokens and rejects the old token", async () => {
+    const session = await registerAndVerify();
+    const oldRefreshToken = session.refreshToken!;
 
     const refresh = await request(app)
       .post("/api/v1/auth/refresh")
@@ -213,44 +220,30 @@ describe("refresh and logout", () => {
   });
 
   it("revokes every refresh token with logout-all", async () => {
-    const registration = await request(app).post("/api/v1/auth/register").send({
-      email: "student@example.com",
-      password: "correct horse battery staple",
-    });
-    const body = authBody(registration).data;
-    if (!body.accessToken || !body.refreshToken) {
-      throw new Error("Registration did not return a token pair");
-    }
+    const session = await registerAndVerify();
 
     const logout = await request(app)
       .post("/api/v1/auth/logout-all")
-      .set("Authorization", `Bearer ${body.accessToken}`)
+      .set("Authorization", `Bearer ${session.accessToken}`)
       .send();
     const refresh = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: body.refreshToken });
+      .send({ refreshToken: session.refreshToken });
 
     expect(logout.status).toBe(200);
     expect(refresh.status).toBe(401);
   });
 
   it("logs out one device by revoking its refresh token", async () => {
-    const registration = await request(app).post("/api/v1/auth/register").send({
-      email: "student@example.com",
-      password: "correct horse battery staple",
-    });
-    const body = authBody(registration).data;
-    const refreshToken = body.refreshToken;
-    const accessToken = body.accessToken;
-    if (!refreshToken || !accessToken) {
-      throw new Error("Registration did not return a token pair");
-    }
+    const session = await registerAndVerify();
 
     const logout = await request(app)
       .post("/api/v1/auth/logout")
-      .set("Authorization", `Bearer ${accessToken}`)
-      .send({ refreshToken });
-    const refresh = await request(app).post("/api/v1/auth/refresh").send({ refreshToken });
+      .set("Authorization", `Bearer ${session.accessToken}`)
+      .send({ refreshToken: session.refreshToken });
+    const refresh = await request(app)
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: session.refreshToken });
 
     expect(logout.status).toBe(200);
     expect(refresh.status).toBe(401);
@@ -290,15 +283,17 @@ describe("password reset", () => {
       email: "student@example.com",
       password: "correct horse battery staple",
     };
-    const registration = await request(app).post("/api/v1/auth/register").send(input);
-    const oldRefreshToken = authBody(registration).data.refreshToken;
+    await request(app).post("/api/v1/auth/register").send(input);
+    const verifyToken = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const verify = await request(app).post("/api/v1/auth/verify-email").send({ token: verifyToken });
+    const oldRefreshToken = authBody(verify).data.refreshToken;
     if (!oldRefreshToken) {
-      throw new Error("Registration did not return a refresh token");
+      throw new Error("Verification did not return a refresh token");
     }
 
     await request(app).post("/api/v1/auth/forgot-password").send({ email: input.email });
     const message = emailSender.messages.at(-1);
-    const token = message?.text.split(": ")[1];
+    const token = message?.text.match(/[a-f0-9]{32,}/i)?.[0];
 
     const reset = await request(app).post("/api/v1/auth/reset-password").send({
       token,
@@ -316,13 +311,15 @@ describe("password reset", () => {
 // ── PATCH /api/v1/auth/me/whatsapp ───────────────────────────────────────────
 
 describe("PATCH /api/v1/auth/me/whatsapp", () => {
-  async function registerAndLogin() {
-    const registration = await request(app).post("/api/v1/auth/register").send({
-      email: "student@example.com",
+  async function registerAndLogin(email = "student@example.com") {
+    await request(app).post("/api/v1/auth/register").send({
+      email,
       password: "correct horse battery staple",
     });
-    const { accessToken } = authBody(registration).data;
-    if (!accessToken) throw new Error("No access token after registration");
+    const token = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const verify = await request(app).post("/api/v1/auth/verify-email").send({ token });
+    const { accessToken } = authBody(verify).data;
+    if (!accessToken) throw new Error("No access token after verification");
     return accessToken;
   }
 
@@ -404,12 +401,7 @@ describe("PATCH /api/v1/auth/me/whatsapp", () => {
       .send({ whatsappNumber: "+2348012345678" });
 
     // Register second user
-    const reg2 = await request(app).post("/api/v1/auth/register").send({
-      email: "student2@example.com",
-      password: "correct horse battery staple",
-    });
-    const token2 = authBody(reg2).data.accessToken;
-    if (!token2) throw new Error("No access token for second user");
+    const token2 = await registerAndLogin("student2@example.com");
 
     // Attempt to set the same number
     const res = await request(app)

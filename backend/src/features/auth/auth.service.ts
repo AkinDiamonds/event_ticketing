@@ -1,4 +1,4 @@
-import { ConflictError, UnauthorizedError } from "#shared/utils/errors.js";
+import { ConflictError, ForbiddenError, UnauthorizedError } from "#shared/utils/errors.js";
 import {
   createAccessToken,
   createOpaqueToken,
@@ -10,6 +10,10 @@ import { hashPassword, comparePassword } from "#shared/utils/password.js";
 import { env } from "#config/env.js";
 import logger from "#shared/utils/logger.js";
 import { NoopEmailSender, type EmailSender } from "#shared/utils/email.js";
+import {
+  buildVerificationEmail,
+  buildPasswordResetEmail,
+} from "#features/notifications/index.js";
 import {
   deleteAllRefreshTokens,
   deleteRefreshToken,
@@ -25,6 +29,7 @@ import {
   insertPasswordResetToken,
   insertRefreshToken,
   insertUser,
+  resetUnverifiedUser,
   rotateRefreshToken,
   updateWhatsappNumber,
   type User,
@@ -90,16 +95,26 @@ async function createVerificationEmail(user: User): Promise<void> {
     expiresAt: new Date(Date.now() + env.EMAIL_VERIFICATION_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  await sendEmail({
-    to: user.email,
-    subject: "Verify your email",
-    text: `Your email verification token is: ${rawToken}`,
-  });
+  await sendEmail(buildVerificationEmail(user.email, rawToken));
 }
 
 export async function register(input: RegisterInput) {
-  if (await findUserByEmail(input.email)) {
-    throw new ConflictError("Email is already registered");
+  const existingUser = await findUserByEmail(input.email);
+
+  if (existingUser) {
+    if (existingUser.isEmailVerified) {
+      throw new ConflictError("Email is already registered");
+    }
+
+    // Email squatting protection: account was unverified.
+    // Reset the account with the new password, clean up old tokens, and send a fresh verification email.
+    const newPasswordHash = await hashPassword(input.password);
+    const updatedUser = await resetUnverifiedUser(existingUser.id, newPasswordHash);
+    await createVerificationEmail(updatedUser);
+
+    return {
+      email: updatedUser.email,
+    };
   }
 
   let user: User;
@@ -115,18 +130,10 @@ export async function register(input: RegisterInput) {
     throw error;
   }
 
-  const session = createSession(user);
-  await insertRefreshToken({
-    userId: user.id,
-    token: session.refreshTokenHash,
-    expiresAt: session.refreshTokenExpiresAt,
-  });
   await createVerificationEmail(user);
 
   return {
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-    user: publicUser(user),
+    email: user.email,
   };
 }
 
@@ -136,6 +143,10 @@ export async function login(input: LoginInput) {
     throw new UnauthorizedError("Invalid email or password");
   }
 
+  if (!user.isEmailVerified) {
+    throw new ForbiddenError("Please verify your email address before logging in");
+  }
+
   const session = createSession(user);
   await insertRefreshToken({
     userId: user.id,
@@ -150,13 +161,27 @@ export async function login(input: LoginInput) {
   };
 }
 
-export async function verifyEmail(input: VerifyEmailInput): Promise<void> {
+export async function verifyEmail(input: VerifyEmailInput) {
   const token = await findValidEmailVerificationToken(hashToken(input.token));
   if (!token) {
     throw new UnauthorizedError("Invalid or expired verification token");
   }
 
-  await completeEmailVerification(token.userId, token.id);
+  const verifiedUser = await completeEmailVerification(token.userId, token.id);
+
+  // Issue active session upon successful verification
+  const session = createSession(verifiedUser);
+  await insertRefreshToken({
+    userId: verifiedUser.id,
+    token: session.refreshTokenHash,
+    expiresAt: session.refreshTokenExpiresAt,
+  });
+
+  return {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    user: publicUser(verifiedUser),
+  };
 }
 
 export async function resendVerification(userId: string): Promise<void> {
@@ -222,11 +247,7 @@ export async function forgotPassword(input: ForgotPasswordInput): Promise<void> 
     expiresAt: new Date(Date.now() + env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  await sendEmail({
-    to: user.email,
-    subject: "Reset your password",
-    text: `Your password reset token is: ${rawToken}`,
-  });
+  await sendEmail(buildPasswordResetEmail(user.email, rawToken));
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<void> {

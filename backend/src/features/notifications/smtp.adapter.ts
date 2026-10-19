@@ -42,6 +42,7 @@ export class SmtpEmailSender implements EmailSender {
         to: message.to,
         subject: message.subject,
         text: message.text,
+        html: message.html,
       });
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);

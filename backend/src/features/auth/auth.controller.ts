@@ -22,8 +22,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 }
 
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
-  await authService.verifyEmail(req.body as VerifyEmailInput);
-  sendSuccess(res, null, "Email verified successfully");
+  const result = await authService.verifyEmail(req.body as VerifyEmailInput);
+  sendSuccess(res, result, "Email verified successfully");
 }
 
 export async function resendVerification(req: Request, res: Response): Promise<void> {
