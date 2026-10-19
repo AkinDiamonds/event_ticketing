@@ -95,7 +95,7 @@ async function createVerificationEmail(user: User): Promise<void> {
     expiresAt: new Date(Date.now() + env.EMAIL_VERIFICATION_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  await sendEmail(buildVerificationEmail(user.email, rawToken));
+  void sendEmail(buildVerificationEmail(user.email, rawToken));
 }
 
 export async function register(input: RegisterInput) {
@@ -247,7 +247,7 @@ export async function forgotPassword(input: ForgotPasswordInput): Promise<void> 
     expiresAt: new Date(Date.now() + env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  await sendEmail(buildPasswordResetEmail(user.email, rawToken));
+  void sendEmail(buildPasswordResetEmail(user.email, rawToken));
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<void> {
@@ -296,7 +296,7 @@ function isUniqueViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   if ("code" in error && error.code === "23505") return true;
   // Drizzle may wrap the pg DatabaseError in an outer error via error.cause
-  if ("cause" in error) return isUniqueViolation((error as { cause: unknown }).cause);
+  if ("cause" in error) return isUniqueViolation(error.cause);
   return false;
 }
 

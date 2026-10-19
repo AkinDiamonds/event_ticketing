@@ -8,14 +8,29 @@ import logger from "#shared/utils/logger.js";
 // will never open a real connection, keeping the test suite infrastructure-free.
 let _pool: Pool | null = null;
 let _db: NodePgDatabase<typeof schema> | null = null;
-
 export function getPool(): Pool {
   if (!_pool) {
-    _pool = new Pool({ connectionString: env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    const isLocal =
+      env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1");
+    const ssl =
+      isLocal && !env.DATABASE_URL.includes("sslmode=require")
+        ? false
+        : { rejectUnauthorized: false };
+
+    _pool = new Pool({
+      connectionString: env.DATABASE_URL,
+      ssl,
+      max: 10,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000,
+      keepAlive: true,
+    });
+
 
     _pool.on("connect", () => {
       logger.debug("PostgreSQL connection established");
     });
+
 
     _pool.on("error", (err) => {
       logger.error("Unexpected error on idle database client", { err });
