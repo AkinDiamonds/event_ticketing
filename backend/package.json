@@ -8,7 +8,7 @@
     "#*": "./dist/*"
   },
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only --esm src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc --project tsconfig.json",
     "start": "node scripts/migrate.mjs && node dist/index.js",
     "test": "vitest run",
@@ -48,6 +48,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^10.1.1",
     "pg": "^8.23.0",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.19.0",
@@ -60,6 +61,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.1.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.20.3",
     "@types/supertest": "^6.0.3",
     "@types/swagger-ui-express": "^4.1.8",

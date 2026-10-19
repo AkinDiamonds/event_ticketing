@@ -32,8 +32,16 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().min(1),
 
   // EMAIL
-  EMAIL_PROVIDER_API_KEY: z.string().min(1),
+  EMAIL_PROVIDER: z.enum(["smtp", "resend", "noop"]).default("smtp"),
+  EMAIL_PROVIDER_API_KEY: z.string().optional(),
   EMAIL_FROM_ADDRESS: z.string().email(),
+  SMTP_HOST: z.string().default("smtp.gmail.com"),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_SECURE: z
+    .preprocess((v) => (typeof v === "string" ? v === "true" : true), z.boolean())
+    .default(true),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
 
   // WHATSAPP
   WHATSAPP_ENABLED: z
@@ -68,6 +76,21 @@ if (parsed.WHATSAPP_ENABLED && (!parsed.WHATSAPP_API_TOKEN || !parsed.WHATSAPP_P
     "\n[startup] WHATSAPP_ENABLED is true but WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID is missing\n"
   );
   process.exit(1);
+}
+
+if (parsed.NODE_ENV === "production") {
+  if (parsed.EMAIL_PROVIDER === "noop") {
+    console.error("\n[startup] EMAIL_PROVIDER 'noop' is not permitted in production\n");
+    process.exit(1);
+  }
+  if (parsed.EMAIL_PROVIDER === "resend" && !parsed.EMAIL_PROVIDER_API_KEY) {
+    console.error("\n[startup] EMAIL_PROVIDER is 'resend' but EMAIL_PROVIDER_API_KEY is missing\n");
+    process.exit(1);
+  }
+  if (parsed.EMAIL_PROVIDER === "smtp" && (!parsed.SMTP_USER || !parsed.SMTP_PASS)) {
+    console.error("\n[startup] EMAIL_PROVIDER is 'smtp' but SMTP_USER or SMTP_PASS is missing\n");
+    process.exit(1);
+  }
 }
 
 export const env = {

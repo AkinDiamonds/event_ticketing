@@ -3,17 +3,17 @@ import { env } from "#config/env.js";
 import { closeDb } from "#config/db.js";
 import logger from "#shared/utils/logger.js";
 import {
-  ResendEmailSender,
+  createEmailSender,
   MetaCloudWhatsAppSender,
   setEmailSender as setNotificationsEmailSender,
   setWhatsAppSender as setNotificationsWhatsAppSender,
 } from "#features/notifications/index.js";
 import { setEmailSender as setAuthEmailSender } from "#features/auth/index.js";
 
-if (env.NODE_ENV === "production") {
-  const resendSender = new ResendEmailSender();
-  setNotificationsEmailSender(resendSender);
-  setAuthEmailSender(resendSender);
+if (env.NODE_ENV !== "test") {
+  const emailSender = createEmailSender();
+  setNotificationsEmailSender(emailSender);
+  setAuthEmailSender(emailSender);
 
   if (env.WHATSAPP_ENABLED) {
     setNotificationsWhatsAppSender(new MetaCloudWhatsAppSender());

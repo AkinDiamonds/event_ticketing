@@ -8,4 +8,6 @@ export {
 } from "./notifications.service.js";
 
 export { ResendEmailSender } from "./resend.adapter.js";
+export { SmtpEmailSender, type SmtpConfig } from "./smtp.adapter.js";
+export { createEmailSender } from "./email.factory.js";
 export { MetaCloudWhatsAppSender } from "./whatsapp.adapter.js";
