@@ -98,7 +98,7 @@ describe("POST /api/v1/auth/register", () => {
     expect(emailSender.messages).toHaveLength(2);
 
     // Verify with the latest token
-    const latestToken = emailSender.messages[1]?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const latestToken = emailSender.messages[1]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
     expect(latestToken).toBeDefined();
 
     const verifyRes = await request(app).post("/api/v1/auth/verify-email").send({ token: latestToken });
@@ -134,7 +134,7 @@ describe("login and email verification", () => {
     expect(authBody(unverifiedLogin).message).toContain("verify your email");
 
     // Verify email using token from email
-    const token = emailSender.messages[0]?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const token = emailSender.messages[0]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
     const verifyRes = await request(app).post("/api/v1/auth/verify-email").send({ token });
     expect(verifyRes.status).toBe(200);
     expect(authBody(verifyRes).data.accessToken).toEqual(expect.any(String));
@@ -158,7 +158,7 @@ describe("login and email verification", () => {
       email: "student@example.com",
       password: "correct horse battery staple",
     });
-    const token = emailSender.messages[0]?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const token = emailSender.messages[0]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
 
     const response = await request(app).post("/api/v1/auth/verify-email").send({ token });
 
@@ -192,7 +192,7 @@ describe("refresh and logout", () => {
       email,
       password: "correct horse battery staple",
     });
-    const token = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const token = emailSender.messages.at(-1)?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
     const verify = await request(app).post("/api/v1/auth/verify-email").send({ token });
     return authBody(verify).data;
   }
@@ -284,7 +284,7 @@ describe("password reset", () => {
       password: "correct horse battery staple",
     };
     await request(app).post("/api/v1/auth/register").send(input);
-    const verifyToken = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const verifyToken = emailSender.messages.at(-1)?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
     const verify = await request(app).post("/api/v1/auth/verify-email").send({ token: verifyToken });
     const oldRefreshToken = authBody(verify).data.refreshToken;
     if (!oldRefreshToken) {
@@ -293,7 +293,7 @@ describe("password reset", () => {
 
     await request(app).post("/api/v1/auth/forgot-password").send({ email: input.email });
     const message = emailSender.messages.at(-1);
-    const token = message?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const token = message?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
 
     const reset = await request(app).post("/api/v1/auth/reset-password").send({
       token,
@@ -316,7 +316,7 @@ describe("PATCH /api/v1/auth/me/whatsapp", () => {
       email,
       password: "correct horse battery staple",
     });
-    const token = emailSender.messages.at(-1)?.text.match(/[a-f0-9]{32,}/i)?.[0];
+    const token = emailSender.messages.at(-1)?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
     const verify = await request(app).post("/api/v1/auth/verify-email").send({ token });
     const { accessToken } = authBody(verify).data;
     if (!accessToken) throw new Error("No access token after verification");

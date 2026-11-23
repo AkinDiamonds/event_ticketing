@@ -95,7 +95,8 @@ async function createVerificationEmail(user: User): Promise<void> {
     expiresAt: new Date(Date.now() + env.EMAIL_VERIFICATION_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  void sendEmail(buildVerificationEmail(user.email, rawToken));
+  const verificationUrl = `${env.FRONTEND_URL}/verify-email?token=${encodeURIComponent(rawToken)}`;
+  void sendEmail(buildVerificationEmail(user.email, verificationUrl));
 }
 
 export async function register(input: RegisterInput) {
@@ -247,7 +248,8 @@ export async function forgotPassword(input: ForgotPasswordInput): Promise<void> 
     expiresAt: new Date(Date.now() + env.PASSWORD_RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000),
   });
 
-  void sendEmail(buildPasswordResetEmail(user.email, rawToken));
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(rawToken)}`;
+  void sendEmail(buildPasswordResetEmail(user.email, resetUrl));
 }
 
 export async function resetPassword(input: ResetPasswordInput): Promise<void> {

@@ -27,7 +27,6 @@ function baseLayout(title: string, bodyContent: string): string {
     .header { background: #1a202c; color: #ffffff; padding: 24px; text-align: center; }
     .header h1 { margin: 0; font-size: 20px; letter-spacing: 0.5px; }
     .content { padding: 32px 24px; line-height: 1.6; }
-    .token-box { background: #edf2f7; border-radius: 6px; padding: 16px; font-family: monospace; font-size: 20px; font-weight: bold; text-align: center; letter-spacing: 2px; margin: 24px 0; color: #2b6cb0; word-break: break-all; }
     .footer { text-align: center; font-size: 12px; color: #718096; padding: 16px 24px; border-top: 1px solid #e2e8f0; }
   </style>
 </head>
@@ -47,31 +46,45 @@ function baseLayout(title: string, bodyContent: string): string {
 </html>`;
 }
 
-export function buildVerificationEmail(to: string, token: string): EmailMessage {
+export function buildVerificationEmail(to: string, verificationUrl: string): EmailMessage {
+  if (!/^https?:\/\//i.test(verificationUrl)) {
+    throw new Error("Invalid verification URL scheme; must be http or https");
+  }
+
   const subject = "Verify your email - Party Tickets";
-  const text = `Welcome to Party Tickets!\n\nYour email verification token is:\n${token}\n\nEnter this token to complete your registration.\n\nIf you did not create an account, you can safely ignore this email.`;
-  const safeToken = escapeHtml(token);
+  const text = `Welcome to Party Tickets!\n\nClick the link below to verify your email address:\n${verificationUrl}\n\nThis link will expire shortly. If you did not create an account, you can safely ignore this email.`;
+  const safeUrl = escapeHtml(verificationUrl);
   const html = baseLayout(
     "Verify Your Email",
     `<h2>Welcome!</h2>
-     <p>Thank you for signing up with Party Tickets. Please enter the verification token below to activate your account:</p>
-     <div class="token-box">${safeToken}</div>
-     <p>This token will expire shortly.</p>`
+     <p>Thank you for signing up with Party Tickets. Click the button below to verify your email address and activate your account:</p>
+     <div style="text-align:center;margin:32px 0;">
+       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2b6cb0;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:600;">Verify Email</a>
+     </div>
+     <p style="font-size:13px;color:#718096;">Or copy and paste this link into your browser:<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#2b6cb0;word-break:break-all;">${safeUrl}</a></p>
+     <p>This link will expire shortly.</p>`
   );
 
   return { to, subject, text, html };
 }
 
-export function buildPasswordResetEmail(to: string, token: string): EmailMessage {
+export function buildPasswordResetEmail(to: string, resetUrl: string): EmailMessage {
+  if (!/^https?:\/\//i.test(resetUrl)) {
+    throw new Error("Invalid password reset URL scheme; must be http or https");
+  }
+
   const subject = "Reset your password - Party Tickets";
-  const text = `You requested a password reset for Party Tickets.\n\nYour password reset token is:\n${token}\n\nIf you did not request a password reset, please secure your account immediately.`;
-  const safeToken = escapeHtml(token);
+  const text = `You requested a password reset for Party Tickets.\n\nClick the link below to set a new password:\n${resetUrl}\n\nThis link will expire shortly. If you did not request a password reset, please secure your account immediately.`;
+  const safeUrl = escapeHtml(resetUrl);
   const html = baseLayout(
     "Reset Your Password",
     `<h2>Password Reset Request</h2>
-     <p>We received a request to reset your password. Use the token below to set a new password:</p>
-     <div class="token-box">${safeToken}</div>
-     <p>If you did not request this, please ignore this email.</p>`
+     <p>We received a request to reset your password. Click the button below to set a new password:</p>
+     <div style="text-align:center;margin:32px 0;">
+       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2b6cb0;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:600;">Reset Password</a>
+     </div>
+     <p style="font-size:13px;color:#718096;">Or copy and paste this link into your browser:<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#2b6cb0;word-break:break-all;">${safeUrl}</a></p>
+     <p>This link will expire shortly. If you did not request this, please ignore this email.</p>`
   );
 
   return { to, subject, text, html };

@@ -50,6 +50,13 @@ const envSchema = z.object({
   WHATSAPP_API_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
 
+  // FRONTEND
+  FRONTEND_URL: z
+    .string()
+    .url()
+    .default("http://localhost:5173")
+    .transform((v) => v.replace(/\/+$/, "")),
+
   // SWAGGER DOC
   ENABLE_SWAGGER: z
     .preprocess((v) => (typeof v === "string" ? v !== "false" : true), z.boolean())
@@ -90,6 +97,9 @@ if (parsed.NODE_ENV === "production") {
   if (parsed.EMAIL_PROVIDER === "smtp" && (!parsed.SMTP_USER || !parsed.SMTP_PASS)) {
     console.error("\n[startup] EMAIL_PROVIDER is 'smtp' but SMTP_USER or SMTP_PASS is missing\n");
     process.exit(1);
+  }
+  if (parsed.FRONTEND_URL.includes("localhost")) {
+    console.warn("\n[startup] WARNING: FRONTEND_URL points to localhost in production mode\n");
   }
 }
 

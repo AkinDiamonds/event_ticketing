@@ -7,6 +7,10 @@ import {
   setEmailSender,
   setWhatsAppSender,
 } from "./notifications.service.js";
+import {
+  buildVerificationEmail,
+  buildPasswordResetEmail,
+} from "./email.templates.js";
 
 
 
@@ -110,3 +114,66 @@ describe("sendTicketWhatsApp", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+// ── buildVerificationEmail ──────────────────────────────────────────────────
+
+describe("buildVerificationEmail", () => {
+  it("formats verification email with link, text fallback, and safe attributes", () => {
+    const url = "http://localhost:5173/verify-email?token=abcdef123456";
+    const email = buildVerificationEmail("user@example.com", url);
+
+    expect(email.to).toBe("user@example.com");
+    expect(email.subject).toBe("Verify your email - Party Tickets");
+    expect(email.text).toContain(url);
+    expect(email.html).toContain(`href="${url}"`);
+    expect(email.html).toContain('target="_blank"');
+    expect(email.html).toContain('rel="noopener noreferrer"');
+    expect(email.html).toContain("Verify Email");
+  });
+
+  it("escapes special HTML characters in URL within HTML layout", () => {
+    const url = "https://example.com/verify-email?token=abc&ref=test";
+    const email = buildVerificationEmail("user@example.com", url);
+
+    expect(email.html).toContain("https://example.com/verify-email?token=abc&amp;ref=test");
+    expect(email.text).toContain(url);
+  });
+
+  it("rejects non-http/https URL schemes", () => {
+    expect(() =>
+      buildVerificationEmail("user@example.com", "javascript:alert(1)")
+    ).toThrow("Invalid verification URL scheme; must be http or https");
+  });
+});
+
+// ── buildPasswordResetEmail ─────────────────────────────────────────────────
+
+describe("buildPasswordResetEmail", () => {
+  it("formats password reset email with link, text fallback, and safe attributes", () => {
+    const url = "http://localhost:5173/reset-password?token=abcdef123456";
+    const email = buildPasswordResetEmail("user@example.com", url);
+
+    expect(email.to).toBe("user@example.com");
+    expect(email.subject).toBe("Reset your password - Party Tickets");
+    expect(email.text).toContain(url);
+    expect(email.html).toContain(`href="${url}"`);
+    expect(email.html).toContain('target="_blank"');
+    expect(email.html).toContain('rel="noopener noreferrer"');
+    expect(email.html).toContain("Reset Password");
+  });
+
+  it("escapes special HTML characters in URL within HTML layout", () => {
+    const url = "https://example.com/reset-password?token=abc&ref=test";
+    const email = buildPasswordResetEmail("user@example.com", url);
+
+    expect(email.html).toContain("https://example.com/reset-password?token=abc&amp;ref=test");
+    expect(email.text).toContain(url);
+  });
+
+  it("rejects non-http/https URL schemes", () => {
+    expect(() =>
+      buildPasswordResetEmail("user@example.com", "javascript:alert(1)")
+    ).toThrow("Invalid password reset URL scheme; must be http or https");
+  });
+});
+
