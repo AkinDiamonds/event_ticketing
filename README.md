@@ -1,8 +1,18 @@
-# Event Ticketing — Backend
+# Event Ticketing
 
-The backend for Event Ticketing, a platform for LASU students to discover and buy tickets to campus parties, and for organizers to create events and check attendees in at the door using anonymous, single-use codes. This repo is the API and all business logic — the frontend lives in a separate repo.
+Event Tickets helps universities, organizations, and community hosts run events. Attendees can discover events and buy tickets, and organizers can check in guests with single-use codes.
 
-## Quick start
+## Frontend quick start
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+See the [frontend README](frontend/README.md) for API configuration and build commands.
+
+## Backend quick start
 ```bash
 # install
 cd backend
