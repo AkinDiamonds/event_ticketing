@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --color-ink: #111713;
+  --color-muted: #565d58;
+  --color-line: #e4e8e5;
+  --color-forest: #075431;
+  --color-forest-dark: #043e23;
+  --color-mint: #f3f9f5;
+  --color-amber: #ffbf12;
+  --color-paper: #fff;
+}
+
+:root {
+  color-scheme: light;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-paper);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { margin: 0; min-height: 100vh; }
+#root { min-height: 100vh; }
+
+:focus-visible {
+  outline: 2px solid var(--color-forest);
+  outline-offset: 3px;
+}
+
+::selection { background: #cfebd8; color: var(--color-forest-dark); }
+
+@layer components {
+  .page-width { @apply mx-auto w-full max-w-[1180px] px-5 md:px-8; }
+  .flow-width { @apply mx-auto w-full max-w-[840px] px-5 md:px-8; }
+  .page-title { @apply text-[24px] leading-[1.2] font-bold tracking-[-0.035em] md:text-[32px]; }
+  .page-description { @apply mt-2 text-sm leading-6 text-muted; }
+  .form-label { @apply block text-[13px] font-semibold; }
+  .form-input {
+    @apply mt-2 min-h-11 w-full rounded-lg border border-line bg-white px-3 py-2 text-base text-ink placeholder:text-[#69736c] focus-visible:border-forest focus-visible:ring-2 focus-visible:ring-forest/15 focus-visible:outline-none md:text-sm;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .print-ticket { break-inside: avoid; print-color-adjust: exact; }
+}
+
+.ticket-poster::before,
+.ticket-poster::after {
+  position: absolute;
+  z-index: 1;
+  bottom: -8px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 100%;
+  background: var(--color-paper);
+  content: "";
+}
+
+.ticket-poster::before { left: -8px; }
+.ticket-poster::after { right: -8px; }
+
+@media (min-width: 768px) {
+  .ticket-poster::before,
+  .ticket-poster::after {
+    right: -8px;
+    left: auto;
+  }
+
+  .ticket-poster::before { top: -8px; }
+}
