@@ -10,6 +10,7 @@ import MyTicketPage from './pages/my-ticket'
 import OrdersPage from './pages/orders'
 import ProfilePage from './pages/profile'
 import AdminEventsPage from './pages/admin/events'
+import CreateEventPage from './pages/create-event'
 import AdminTicketsPage from './pages/admin/tickets'
 import AuthPage from './pages/auth'
 
@@ -27,6 +28,7 @@ export const routes: RouteModule[] = [
   { path: '/reset-password', component: AuthPage },
   { path: '/password-reset-success', component: AuthPage },
   { path: '/tickets', component: TicketsPage },
+  { path: '/events/create', component: CreateEventPage },
   { path: '/tickets/:id', component: TicketDetailPage },
   { path: '/tickets/:id/select', component: TicketDetailPage },
   { path: '/tickets/:id/attendee', component: TicketAttendeePage },

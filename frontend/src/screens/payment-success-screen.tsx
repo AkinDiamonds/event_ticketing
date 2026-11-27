@@ -6,7 +6,7 @@ type Props = { viewTicketHref: string; eventsHref: string; status: 'loading' | '
 
 const messages = {
   loading: ['Checking your payment', 'We’re confirming your order.'],
-  paid: ['Payment Successful!', 'Your payment is confirmed. Check your email for the ticket code you’ll use at the venue.'],
+  paid: ['Payment Successful!', 'Your payment is confirmed. Check your email for your entry codes and a link to your order.'],
   pending: ['Payment pending', 'Check this page again in a moment to confirm your order.'],
   error: ['Unable to confirm payment', 'Check your order confirmation or contact support before paying again.'],
 } as const
@@ -26,7 +26,7 @@ export function PaymentSuccessScreen({ viewTicketHref, eventsHref, status, order
         <p className="mt-3 text-sm leading-6 text-white/85 md:text-muted">{description}</p>
         {orderId && status !== 'paid' ? <p className="mt-3 text-xs break-all text-white/75 md:text-muted">Order reference {orderId}</p> : null}
         <div className="mt-7 grid gap-3">
-          {status === 'paid' ? <Button variant="accent" href={viewTicketHref}>View Ticket</Button> : null}
+          {status === 'paid' ? <Button variant="accent" href={viewTicketHref}>View Order</Button> : null}
           {status === 'pending' ? <Button onClick={() => window.location.reload()}>Check Payment</Button> : null}
           <a href={eventsHref} className="inline-flex min-h-11 items-center justify-center rounded-lg text-sm font-semibold hover:underline md:text-forest">Back to Events</a>
         </div>

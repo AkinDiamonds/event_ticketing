@@ -9,6 +9,7 @@ import {
   logoutSchema,
   refreshSchema,
   registerSchema,
+  resendVerificationEmailSchema,
   resetPasswordSchema,
   setWhatsAppSchema,
   verifyEmailSchema,
@@ -46,6 +47,12 @@ router.post(
   authController.resendVerification
 );
 router.post("/refresh", validate({ body: refreshSchema }), authController.refresh);
+router.post(
+  "/resend-verification-email",
+  authRateLimiter,
+  validate({ body: resendVerificationEmailSchema }),
+  authController.resendVerificationEmail
+);
 router.post("/logout", authenticate, validate({ body: logoutSchema }), authController.logout);
 router.post("/logout-all", authenticate, authController.logoutAll);
 router.post(
@@ -59,6 +66,7 @@ router.post(
   validate({ body: resetPasswordSchema }),
   authController.resetPassword
 );
+router.get("/me", authenticate, authController.getCurrentUser);
 router.patch(
   "/me/whatsapp",
   authenticate,

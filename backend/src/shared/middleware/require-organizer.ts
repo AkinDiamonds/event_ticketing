@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { findUserById } from "#features/auth/index.js";
+import { findUserById, isApprovedOrganizer } from "#features/auth/index.js";
 import { ForbiddenError, UnauthorizedError } from "#shared/utils/errors.js";
 
 export async function requireOrganizer(
@@ -12,14 +12,9 @@ export async function requireOrganizer(
     return;
   }
 
-  if (req.user.isOrganizer) {
-    next();
-    return;
-  }
-
   const user = await findUserById(req.user.userId);
-  if (!user?.isOrganizer) {
-    next(new ForbiddenError("Organizer access required"));
+  if (!user || !isApprovedOrganizer(user)) {
+    next(new ForbiddenError("Approved organizer access required"));
     return;
   }
 

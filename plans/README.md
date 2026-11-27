@@ -1,6 +1,6 @@
 # Plans - Roadmap
 
-This directory contains the implementation contract for the LASU Party Tickets backend. Every plan follows `plan_TEMPLATE.md`. Scope, edge cases, acceptance criteria, and security checks are written before implementation; the understanding note is completed afterward.
+This directory contains the implementation contract for the Event Tickets backend. Every plan follows `plan_TEMPLATE.md`. Scope, edge cases, acceptance criteria, and security checks are written before implementation; the understanding note is completed afterward.
 
 ## Roadmap
 

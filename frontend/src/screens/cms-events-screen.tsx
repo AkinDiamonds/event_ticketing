@@ -4,42 +4,51 @@ import { Button } from '../components/button'
 import { EventBanner } from '../components/ticket'
 import { Card } from '../components/card'
 import { PencilIcon } from '../components/icons'
-import { TicketInventoryFields, TicketTypePicker } from '../components/ticket-type-fields'
-import { readInventory, ticketTypes, type InventoryDraft } from '../lib/ticket-types'
 import { useRouter } from '../router'
 import { formatEventSchedule } from '../lib/format-event'
-import { getEvents, createEvent, updateEvent, deleteEvent, type EventRecord, type CreateEventInput } from '../lib/events-api'
+import { getOrganizerEvents, createEvent, updateEvent, deleteEvent, type EventRecord, type CreateEventInput } from '../lib/events-api'
 
-type EventForm = Omit<CreateEventInput, 'tiers' | 'bannerImageUrl'> & { bannerImageUrl: string }
+type EventForm = Omit<CreateEventInput, 'bannerImageUrl'> & { bannerImageUrl: string }
 const blank: EventForm = { title: '', description: '', bannerImageUrl: '', venue: '', startsAt: '' }
-type Props = { backHref: string; ticketSettingsHref: string }
+type Props = { backHref: string; ticketSettingsHref: string; createOnly?: boolean }
 
-export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
+export function CmsEventsScreen({ backHref, ticketSettingsHref, createOnly = false }: Props) {
   const [events, setEvents] = useState<EventRecord[]>([])
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
   const { navigate } = useRouter()
   const [form, setForm] = useState<EventForm>(blank)
-  const [ticketType, setTicketType] = useState<string>(ticketTypes[0])
-  const [inventory, setInventory] = useState<InventoryDraft>({ price: '', quantity: '' })
   const [editing, setEditing] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(createOnly)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
+    if (createOnly) return
     let active = true
-    getEvents().then((items) => { if (active) setEvents(items) })
+    getOrganizerEvents(page).then(({ items, totalPages }) => {
+      if (active) {
+        setEvents(items)
+        setTotalPages(totalPages)
+      }
+    })
       .catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Could not load events.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [])
+  }, [createOnly, page])
+
+  function changePage(nextPage: number) {
+    setLoading(true)
+    setError('')
+    setEvents([])
+    setPage(nextPage)
+  }
 
   function startCreate() {
     setEditing(null)
     setForm(blank)
-    setTicketType(ticketTypes[0])
-    setInventory({ price: '', quantity: '' })
     setError('')
     setOpen(true)
   }
@@ -63,7 +72,7 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
       if (editing) {
         await updateEvent(editing, payload)
       } else {
-        const created = await createEvent({ ...payload, tiers: [{ name: ticketType, ...readInventory(inventory) }] })
+        const created = await createEvent(payload)
         if (created.id) {
           navigate(ticketSettingsHref + '?eventId=' + encodeURIComponent(created.id) + '&created=1')
           return
@@ -72,7 +81,9 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
       setNotice(editing ? 'Event updated.' : 'Event created.')
       setOpen(false)
       try {
-        setEvents(await getEvents())
+        const result = await getOrganizerEvents(page)
+        setEvents(result.items)
+        setTotalPages(result.totalPages)
       } catch {
         setError('Could not refresh the events list. Reload this page to see the latest events.')
       }
@@ -88,7 +99,13 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
     setError('')
     try {
       await deleteEvent(event.id)
-      setEvents((current) => current.filter((item) => item.id !== event.id))
+      if (events.length === 1 && page > 1) {
+        changePage(page - 1)
+      } else {
+        const result = await getOrganizerEvents(page)
+        setEvents(result.items)
+        setTotalPages(result.totalPages)
+      }
       setNotice('Event deleted.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not delete event.')
@@ -97,11 +114,14 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
 
   return (
     <div className="min-h-dvh bg-white">
-      <TopBar organizer menu />
+      {createOnly ? <TopBar backHref={backHref} backLabel="Back to events" /> : <TopBar organizer menu />}
       <div className="page-width py-6 md:py-10">
         <div className="mb-5 flex items-center justify-between gap-3">
-          <h1 className="page-title">{open ? (editing ? 'Edit Event' : 'Create New Event') : 'Events'}</h1>
-          {open ? <Button size="sm" variant="secondary" disabled={saving} onClick={() => { setOpen(false); setError('') }}>Cancel</Button> : <Button size="sm" onClick={startCreate}>+ New Event</Button>}
+          <h1 className="page-title">{open ? (editing ? 'Edit Event' : 'Create New Event') : 'My Events'}</h1>
+          {open ? <Button size="sm" variant="secondary" disabled={saving} onClick={() => {
+            if (createOnly) navigate(backHref)
+            else { setOpen(false); setError('') }
+          }}>Cancel</Button> : <Button size="sm" onClick={startCreate}>+ New Event</Button>}
         </div>
         {notice && !open ? <p role="status" className="mb-4 text-sm font-medium text-forest">{notice}</p> : null}
         {error ? <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
@@ -114,18 +134,13 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
               <label className="form-label">Start Date and Time<input required type="datetime-local" className="form-input" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
             </div>
             <div className="flex flex-col gap-4">
-              {!editing ? (
-                <div className="space-y-3 border-t border-line pt-4 md:order-2">
-                  <TicketTypePicker options={ticketTypes} value={ticketType} onChange={setTicketType} />
-                  <TicketInventoryFields value={inventory} onChange={setInventory} />
-                </div>
-              ) : null}
               <div className="space-y-3 md:order-1">
                 <label className="form-label">Banner image URL <span className="font-normal text-muted">(optional)</span><input type="url" className="form-input" value={form.bannerImageUrl} placeholder="https://example.com/banner.jpg" onChange={(e) => setForm({ ...form, bannerImageUrl: e.target.value })} /></label>
                 <EventBanner title={form.title || 'Event banner'} imageUrl={/^https?:\/\//i.test(form.bannerImageUrl) ? form.bannerImageUrl : undefined}
                   className={form.bannerImageUrl ? 'aspect-[1.8] rounded-lg p-5' : 'hidden aspect-[1.8] rounded-lg p-5 md:flex'} />
               </div>
-              <Button type="submit" disabled={saving} className="w-full md:order-3">{saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Event'}</Button>
+              {!editing ? <p className="text-sm text-muted md:order-2">After saving, you can add and manage ticket types from the ticket setup screen.</p> : null}
+              <Button type="submit" disabled={saving} className="w-full md:order-3">{saving ? 'Saving…' : editing ? 'Save Changes' : 'Save Event and Set Up Tickets'}</Button>
             </div>
           </form>
         ) : (
@@ -137,8 +152,8 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
                 <EventBanner title="" imageUrl={event.bannerImageUrl} className="aspect-square rounded-lg p-0" />
                 <div className="min-w-0">
                   <h2 className="font-bold">{event.title}</h2>
+                  {event.isPublished === false ? <span className="text-xs font-semibold text-muted">Draft</span> : null}
                   <p className="mt-1 text-[13px] text-muted">{[formatEventSchedule(event.startsAt)?.day, event.venue].filter(Boolean).join(' · ')}</p>
-                  {event.tiers.length ? <p className="mt-1 text-xs text-muted">{event.tiers.length} ticket {event.tiers.length === 1 ? 'type' : 'types'}</p> : null}
                 </div>
                 <div className="col-span-2 flex flex-wrap gap-2 md:col-span-1">
                   <Button size="sm" variant="secondary" onClick={() => startEdit(event)}><PencilIcon className="size-4" /> Edit Event</Button>
@@ -147,6 +162,13 @@ export function CmsEventsScreen({ backHref, ticketSettingsHref }: Props) {
                 </div>
               </article>
             ))}
+            {page > 1 || totalPages > 1 ? (
+              <nav className="flex items-center gap-3" aria-label="Event pages">
+                <Button size="sm" variant="secondary" disabled={loading || page <= 1} onClick={() => changePage(page - 1)}>Previous</Button>
+                <span className="text-sm text-muted">Page {page}</span>
+                <Button size="sm" variant="secondary" disabled={loading || page >= totalPages} onClick={() => changePage(page + 1)}>Next</Button>
+              </nav>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-3"><Button href="/tickets" variant="ghost">View Public Events</Button><Button href={backHref} variant="ghost">Back to Profile</Button></div>
           </div>
         )}

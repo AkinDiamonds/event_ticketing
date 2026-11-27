@@ -29,6 +29,27 @@
       "when": 1790843840911,
       "tag": "0003_real_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795808354713,
+      "tag": "0004_client_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795808791047,
+      "tag": "0005_ticket_sales_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795810042631,
+      "tag": "0006_self_service_payouts",
+      "breakpoints": true
     }
   ]
 }

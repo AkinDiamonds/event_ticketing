@@ -24,7 +24,7 @@ export function TicketInventoryFields({ value, onChange, minimum = 1 }: { value:
   return (
     <div className="grid grid-cols-2 gap-3">
       <label className="form-label">Price (₦)
-        <input required type="number" inputMode="decimal" min="0" max="21474836.47" step="0.01" className="form-input" value={value.price} onChange={(e) => onChange({ ...value, price: e.target.value })} />
+        <input required type="number" inputMode="decimal" min="50" max="21474836.47" step="0.01" className="form-input" value={value.price} onChange={(e) => onChange({ ...value, price: e.target.value })} />
       </label>
       <label className="form-label">Quantity
         <input required type="number" inputMode="numeric" min={minimum} max="2147483647" step="1" className="form-input" value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />

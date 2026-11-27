@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createApp } from "../../app.js";
 import { closeDb, getDb } from "#config/db.js";
+import { createAccessToken } from "#shared/utils/tokens.js";
 import {
   emailVerificationTokens,
   passwordResetTokens,
@@ -11,6 +12,7 @@ import {
 } from "#features/auth/auth.schema.js";
 import { events, ticketTiers } from "./events.schema.js";
 import { orders, orderItems, tickets } from "#features/orders/orders.schema.js";
+import { organizerPayouts } from "#db/schema.js";
 
 const app = createApp();
 
@@ -38,17 +40,22 @@ function body(response: { body: unknown }): ResponseBody {
  * access token. Use this helper any time a test needs an authenticated,
  * verified organizer candidate.
  */
-async function registerVerifiedUser(email: string): Promise<string> {
+async function registerVerifiedUser(email: string, approved = false): Promise<string> {
   const response = await request(app).post("/api/v1/auth/register").send({
     email,
     password: "correct horse battery staple",
   });
-  const accessToken = body(response).data?.accessToken;
+  expect(response.status).toBe(201);
+  await getDb().update(users)
+    .set({ isEmailVerified: true, organizerApprovedAt: approved ? new Date() : null })
+    .where(eq(users.email, email));
+  const login = await request(app).post("/api/v1/auth/login").send({
+    email, password: "correct horse battery staple",
+  });
+  const accessToken = body(login).data?.accessToken;
   if (!accessToken) {
-    throw new Error(`Registration did not return an access token (status ${response.status})`);
+    throw new Error(`Login did not return an access token (status ${login.status})`);
   }
-
-  await getDb().update(users).set({ isEmailVerified: true }).where(eq(users.email, email));
 
   return accessToken;
 }
@@ -66,7 +73,7 @@ async function createEventAsOrganizer(email: string): Promise<{
   eventId: string;
   tierId: string;
 }> {
-  const accessToken = await registerVerifiedUser(email);
+  const accessToken = await registerVerifiedUser(email, true);
   const response = await request(app)
     .post("/api/v1/events")
     .set("Authorization", `Bearer ${accessToken}`)
@@ -83,6 +90,11 @@ async function createEventAsOrganizer(email: string): Promise<{
   if (!eventId || !tierId) {
     throw new Error(`Event creation did not return expected IDs (status ${response.status})`);
   }
+  const [event] = await getDb().update(events).set({ isPublished: true }).where(eq(events.id, eventId)).returning();
+  await getDb().insert(organizerPayouts).values({
+    organizerId: event!.organizerId, subaccountCode: `ACCT_${eventId}`, subaccountId: eventId.slice(0, 32),
+    accountName: "Test Organizer", bankCode: "058", accountLast4: "6047",
+  });
 
   return { accessToken, eventId, tierId };
 }
@@ -172,7 +184,53 @@ describe("public event endpoints", () => {
 // ── Event creation and ownership ──────────────────────────────────────────────
 
 describe("event creation and ownership", () => {
-  it("requires authentication and verified email to create an event", async () => {
+  it("lists only owned events and honors revocation with the original access token", async () => {
+    const email = "approved-owner@example.com";
+    const owner = await createEventAsOrganizer(email);
+    const other = await createEventAsOrganizer("approved-other@example.com");
+    const attendee = await registerVerifiedUser("event-viewer@example.com");
+    const path = "/api/v1/events/organizer";
+    const auth = `Bearer ${owner.accessToken}`;
+    expect((await request(app).get("/api/v1/auth/me")).status).toBe(401);
+    const approvedAccount = await request(app).get("/api/v1/auth/me").set("Authorization", auth);
+    expect(body(approvedAccount).data?.["isOrganizer"]).toBe(true);
+    expect((await request(app).get(path)).status).toBe(401);
+    expect((await request(app).get(path).set("Authorization", `Bearer ${attendee}`)).status).toBe(403);
+    const list = await request(app).get(path).set("Authorization", auth);
+    expect(body(list).data?.items?.map((event) => event.id)).toEqual([owner.eventId]);
+    expect((await request(app).get(`${path}/${other.eventId}`).set("Authorization", auth)).status).toBe(404);
+    expect((await request(app).get(`${path}/${owner.eventId}`).set("Authorization", auth)).status).toBe(200);
+    expect((await request(app).get(`${path}/invalid-id`).set("Authorization", auth)).status).toBe(422);
+    expect((await request(app).get(`${path}?page=0`).set("Authorization", auth)).status).toBe(422);
+
+    await getDb().update(users).set({ organizerSuspendedAt: new Date() }).where(eq(users.email, email));
+    const currentAccount = await request(app).get("/api/v1/auth/me").set("Authorization", auth);
+    expect(body(currentAccount).data?.["isOrganizer"]).toBe(false);
+    expect((await request(app).get(path).set("Authorization", auth)).status).toBe(403);
+    const update = await request(app).patch(`/api/v1/events/${owner.eventId}`)
+      .set("Authorization", auth).send({ title: "After revocation" });
+    expect(update.status).toBe(403);
+  });
+
+  it("keeps a paused tier private until an organizer enables sales", async () => {
+    const owner = await createEventAsOrganizer("paused-owner@example.com");
+    const auth = `Bearer ${owner.accessToken}`;
+    const path = `/api/v1/events/${owner.eventId}`;
+    const added = await request(app).post(`${path}/tiers`).set("Authorization", auth)
+      .send({ name: "Balcony", price: 800000, quantityAvailable: 12, isActive: false });
+    expect(added.status).toBe(201);
+    const tierId = body(added).data?.id;
+    const before = await request(app).get(path);
+    expect(body(before).data?.tiers?.map((tier) => tier.id)).toEqual([owner.tierId]);
+
+    const enabled = await request(app).patch(`${path}/tiers/${tierId}`).set("Authorization", auth)
+      .send({ name: "Premium Balcony", isActive: true });
+    expect(enabled.status).toBe(200);
+    const after = await request(app).get(path);
+    expect(body(after).data?.tiers).toContainEqual(expect.objectContaining({ name: "Premium Balcony" }));
+  });
+
+  it("requires authentication and prevents a suspended organizer from opening a new workspace", async () => {
     const input = {
       title: "Campus Night",
       description: "A student party event",
@@ -182,20 +240,21 @@ describe("event creation and ownership", () => {
     };
 
     const unauthenticated = await request(app).post("/api/v1/events").send(input);
-    const registration = await request(app).post("/api/v1/auth/register").send({
-      email: "unverified@example.com",
-      password: "correct horse battery staple",
+    const email = "legacy@example.com";
+    await registerVerifiedUser(email);
+    const [legacy] = await getDb().update(users).set({ isOrganizer: true, organizerSuspendedAt: new Date() })
+      .where(eq(users.email, email)).returning();
+    const staleToken = createAccessToken({
+      userId: legacy!.id, email, isEmailVerified: true, isOrganizer: true,
     });
-    const unverified = await request(app)
-      .post("/api/v1/events")
-      .set("Authorization", `Bearer ${body(registration).data?.accessToken}`)
-      .send(input);
+    const attendee = await request(app).post("/api/v1/events")
+      .set("Authorization", `Bearer ${staleToken}`).send(input);
 
     expect(unauthenticated.status).toBe(401);
-    expect(unverified.status).toBe(403);
+    expect(attendee.status).toBe(403);
   });
 
-  it("creates the first event and promotes the user to organizer", async () => {
+  it("gives a verified attendee a workspace when they save their first private draft", async () => {
     const accessToken = await registerVerifiedUser("organizer@example.com");
     const response = await request(app)
       .post("/api/v1/events")
@@ -205,21 +264,29 @@ describe("event creation and ownership", () => {
         description: "A student party event",
         venue: "LASU Main Auditorium",
         startsAt: "2026-12-31T20:00:00+00:00",
-        tiers: [{ name: "Regular", price: 500000, quantityAvailable: 100 }],
       });
 
     expect(response.status).toBe(201);
     expect(body(response).data?.event).toEqual(
       expect.objectContaining({ id: expect.any(String) as unknown as string })
     );
-    expect(body(response).data?.tiers).toHaveLength(1);
+    expect(body(response).data?.tiers).toHaveLength(0);
+    const eventId = body(response).data?.event?.id;
+    expect((await request(app).get(`/api/v1/events/${eventId}`)).status).toBe(404);
+    const eventsResponse = await request(app).get("/api/v1/events/organizer")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(body(eventsResponse).data?.items).toHaveLength(1);
+    const publish = await request(app).post(`/api/v1/events/${eventId}/publish`)
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(publish.status).toBe(409);
 
     const [user] = await getDb().select().from(users);
-    expect(user?.isOrganizer).toBe(true);
+    expect(user?.isOrganizer).toBe(false);
+    expect(user?.organizerApprovedAt).toBeInstanceOf(Date);
   });
 
   it("rejects event creation with invalid input", async () => {
-    const accessToken = await registerVerifiedUser("organizer-invalid@example.com");
+    const accessToken = await registerVerifiedUser("organizer-invalid@example.com", true);
 
     // Missing required fields: title, venue, startsAt, tiers
     const response = await request(app)
@@ -230,8 +297,8 @@ describe("event creation and ownership", () => {
     expect(response.status).toBe(422);
   });
 
-  it("rejects event creation with no tiers", async () => {
-    const accessToken = await registerVerifiedUser("organizer-notiers@example.com");
+  it("lets an approved client submit an empty tier list", async () => {
+    const accessToken = await registerVerifiedUser("organizer-notiers@example.com", true);
 
     const response = await request(app)
       .post("/api/v1/events")
@@ -244,16 +311,12 @@ describe("event creation and ownership", () => {
         tiers: [],
       });
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(201);
   });
 
   it("prevents another organizer from editing the event", async () => {
-    const ownerToken = await registerVerifiedUser("owner@example.com");
-    const otherToken = await registerVerifiedUser("other@example.com");
-    await getDb()
-      .update(users)
-      .set({ isOrganizer: true })
-      .where(eq(users.email, "other@example.com"));
+    const ownerToken = await registerVerifiedUser("owner@example.com", true);
+    const otherToken = await registerVerifiedUser("other@example.com", true);
     const created = await request(app)
       .post("/api/v1/events")
       .set("Authorization", `Bearer ${ownerToken}`)
@@ -396,7 +459,7 @@ describe("ticket tier management", () => {
     // Promote manually so requireOrganizer passes
     await getDb()
       .update(users)
-      .set({ isOrganizer: true })
+      .set({ organizerApprovedAt: new Date() })
       .where(eq(users.email, "organizer-tiernoevent@example.com"));
 
     const response = await request(app)
@@ -480,7 +543,7 @@ describe("ticket tier management", () => {
     const otherToken = await registerVerifiedUser("other-tiernot@example.com");
     await getDb()
       .update(users)
-      .set({ isOrganizer: true })
+      .set({ organizerApprovedAt: new Date() })
       .where(eq(users.email, "other-tiernot@example.com"));
 
     const response = await request(app)

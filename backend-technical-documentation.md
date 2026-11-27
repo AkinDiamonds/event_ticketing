@@ -1,4 +1,4 @@
-# LASU Party Tickets — Backend Technical Documentation
+# Event Tickets Backend Technical Documentation
 
 This is the single reference for the backend: how it's built, how it works, and how to extend it. If it's not in here or in the OpenAPI spec, it isn't documented yet — add it rather than asking around.
 
@@ -8,9 +8,9 @@ This is the single reference for the backend: how it's built, how it works, and 
 
 ## 1. Overview
 
-An event ticketing platform for LASU students to discover parties, buy tickets, and get into the door — and for organizers to list events, sell tickets, and check people in.
+An event ticketing platform where attendees discover events and buy tickets, and organizers list events, sell tickets, and check guests in.
 
-**One account type, not two.** Everyone starts as a regular user. A user becomes an organizer automatically the moment they create their first event — there's no separate signup flow or account type to manage.
+Everyone starts as an attendee. Verified users can create their first private event draft, which enables their organizer workspace. Organizer access and event ownership are checked on the server. Platform administration runs outside the customer-facing app.
 
 **Core flows:**
 - A student browses events, buys one or more tickets (possibly across different tiers, possibly for friends), and receives a unique code per ticket by email.
@@ -146,7 +146,7 @@ The app should fail fast on missing required variables — validate them all at 
 Being unverified doesn't lock anyone out of the app — it only blocks the two actions where an unreachable email is actually a problem:
 
 - **Buying tickets** — if the email bounces, the buyer never gets their code, and there's no other delivery channel guaranteed to exist (Section 10).
-- **Creating an event** (becoming an organizer) — an organizer needs a working email to receive their own sales/order notifications and to be reachable if something goes wrong.
+- **Creating an event** requires a verified email and an active account. The first draft enables the workspace.
 
 Browsing events, viewing your profile, and everything else works fine unverified. Attempting a gated action while unverified returns a `EmailNotVerifiedError` (see Section 12) — the frontend should treat this as a specific, actionable error ("verify your email to continue"), not a generic failure.
 
@@ -159,7 +159,8 @@ Browsing events, viewing your profile, and everything else works fine unverified
 ### Authorization
 
 - `authenticate` middleware verifies the access token and attaches `req.user`.
-- `requireOrganizer` middleware checks `user.isOrganizer === true`. Applied to: create event, edit event, view an event's orders/sales, and the check-in endpoint.
+- `requireOrganizer` checks the account’s current verified, enabled, and unsuspended status in the database. It protects organizer reads, publishing, event and tier changes, payout setup, and check-in. Ownership is checked separately for each event. Saving the first draft checks eligibility and enables the workspace in the same transaction.
+- Operators use `npm run client:access -- list` to review organizer accounts. `npm run client:access -- revoke <email>` suspends organizer activity. `npm run client:access -- approve <email>` restores it. A suspended organizer cannot start a new workspace or accept new payments.
 - There is no separate "staff" role in MVP. If an organizer needs extra hands at the door, they share their login. This is a known limitation, not a bug — build a real staff-invite system when it's actually requested.
 
 ---
@@ -175,7 +176,9 @@ All tables use UUID primary keys and `createdAt`/`updatedAt` timestamps unless n
 | `email` | varchar, unique | login identity |
 | `passwordHash` | text | bcrypt |
 | `isEmailVerified` | boolean, default `false` | flipped to `true` via `/auth/verify-email` |
-| `isOrganizer` | boolean, default `false` | flipped to `true` on first event creation |
+| `isOrganizer` | boolean, default `false` | Historical organizer flag kept for operator review |
+| `organizerApprovedAt` | timestamp, nullable | Workspace enabled when the first draft was saved, or by the operator |
+| `organizerSuspendedAt` | timestamp, nullable | Operator suspension of organizer access |
 | `deletedAt` | timestamp, nullable | soft delete |
 
 ### `refresh_tokens`
@@ -282,7 +285,7 @@ WHERE id = :tierId
 
 If this update affects zero rows, the tier didn't have enough stock left — fail the order before it ever reaches Paystack, don't take someone's money for a ticket that doesn't exist.
 
-Before Paystack initialization, checkout instead atomically increments `quantityReserved` while enforcing `quantitySold + quantityReserved + :qty <= quantityAvailable`. A pending reservation expires after `ORDER_RESERVATION_MINUTES` (15 by default). Failed or expired orders release the reservation. On verified payment, fulfillment moves the reserved quantity to `quantitySold` in the same transaction that creates tickets. A cleanup command releases expired reservations; no background worker is required for the MVP.
+Before Paystack initialization, checkout atomically reserves stock for on-sale tiers within their capacity. An event can be saved before adding ticket tiers. Organizers can pause individual tiers, which stops new purchases and preserves existing reservations and tickets. A pending reservation expires after `ORDER_RESERVATION_MINUTES` (15 by default). The backend releases expired reservations at startup and once a minute. On verified payment, fulfillment moves reserved inventory to sold in the same transaction that creates tickets.
 
 ### Check-in flow
 
@@ -320,12 +323,20 @@ Full request/response schemas, validation rules, and example payloads are auto-g
 3. **The webhook is the source of truth, not the frontend redirect.** When Paystack sends `charge.success` to `POST /api/v1/payments/webhook`:
    - Verify the request signature against `PAYSTACK_SECRET_KEY` before trusting anything in the payload.
    - Independently call Paystack's `transaction/verify/:reference` to confirm the amount and status server-to-server — never trust a webhook body alone for something this important.
-  - Only then: if the reservation is still valid, move reserved inventory to sold, mark the order `paid`, generate ticket codes, and trigger notifications.
-  - If the reservation expired or inventory cannot be fulfilled, preserve the verified payment as `payment_exception`; never oversell and never silently mark a confirmed payment as an ordinary failure.
+  - If Paystack received payment before the deadline and inventory is still reserved, move stock to sold, create ticket codes, and mark the order `paid` in a single transaction.
+  - Record late payments, amount mismatches, and payments received after stock was released as `payment_exception` for reconciliation.
 4. The frontend's post-checkout redirect page should just poll `GET /api/v1/orders/:id` for status, not assume success from the redirect itself — the webhook may arrive a few seconds later.
-5. `paystackReference` is unique on the `orders` table specifically so a webhook that fires twice (Paystack does retry) can't generate duplicate tickets — check for an already-`paid` order and no-op instead of reprocessing.
+5. The webhook acknowledges successful delivery after the payment outcome commits. Temporary verification or transaction failures return a retryable response. Fulfillment and cleanup lock the same order row before changing inventory, so concurrent delivery and repeated cleanup cannot process the same reservation twice. Buyer notifications are attempted after fulfillment commits.
 
 Paystack may support refunds, but refund eligibility, settlement timing, fees, and execution depend on the Paystack account and transaction state. The MVP preserves `payment_exception` for operational reconciliation; it does not assume or automate refunds.
+
+### Organizer payouts
+
+New events start private. Publishing requires an organizer payout account, an enabled paid tier, and a configured fee policy. Existing events keep their public URLs after migration. Ticket sales require the owner to link a payout account.
+
+The payout form submits bank details to the Event Tickets API. The server resolves the bank account and confirms the account name again when the organizer supplies their current password. It creates the Paystack subaccount and stores its identifiers, the resolved name, the bank code, and the last four digits. The full bank account number and password are excluded from responses and the payout record. Changing a linked account requires an operator-managed process.
+
+Set the agreed `PAYSTACK_PLATFORM_FEE_BPS` and `PAYSTACK_FEE_BEARER` on the backend to enable paid sales. Checkout resolves prices from the ticket tiers, calculates the fee in kobo, and uses the event owner’s saved subaccount. The server sets the Paystack callback URL and returns the hosted checkout link. Event revenue comes from paid orders. Recent settlements are reported separately for the organizer’s payout account and can include sales across multiple events.
 
 ---
 

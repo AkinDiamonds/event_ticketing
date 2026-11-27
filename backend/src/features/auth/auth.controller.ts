@@ -7,6 +7,7 @@ import {
   type VerifyEmailInput,
   type RefreshInput,
   type ForgotPasswordInput,
+  type ResendVerificationEmailInput,
   type ResetPasswordInput,
   type SetWhatsAppInput,
 } from "./auth.schemas.js";
@@ -21,6 +22,12 @@ export async function login(req: Request, res: Response): Promise<void> {
   sendSuccess(res, result, "Login successful");
 }
 
+export async function getCurrentUser(req: Request, res: Response): Promise<void> {
+  const user = await authService.getCurrentUser(req.user!.userId);
+  res.set("Cache-Control", "no-store");
+  sendSuccess(res, user, "Account retrieved");
+}
+
 export async function verifyEmail(req: Request, res: Response): Promise<void> {
   const result = await authService.verifyEmail(req.body as VerifyEmailInput);
   sendSuccess(res, result, "Email verified successfully");
@@ -29,6 +36,11 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
 export async function resendVerification(req: Request, res: Response): Promise<void> {
   await authService.resendVerification(req.user!.userId);
   sendSuccess(res, null, "Verification email sent");
+}
+
+export async function resendVerificationEmail(req: Request, res: Response): Promise<void> {
+  await authService.resendVerificationEmail(req.body as ResendVerificationEmailInput);
+  sendSuccess(res, null, "If the account still needs verification, a link has been sent");
 }
 
 export async function refresh(req: Request, res: Response): Promise<void> {

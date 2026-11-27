@@ -1,14 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { env } from "#config/env.js";
+import { paymentPolicy } from "#features/payments/index.js";
 import logger from "#shared/utils/logger.js";
 import { AppError, EmailNotVerifiedError, NotFoundError } from "#shared/utils/errors.js";
 import {
   createOrderWithReservation,
   findOrderById,
   getExpiredPendingOrders,
-  getOrderWithItems,
   releaseReservation,
-  updateOrderStatus,
   type Order,
 } from "./orders.repository.js";
 import type { CheckoutSchema } from "./orders.schemas.js";
@@ -28,6 +27,7 @@ export async function checkout(
   if (!isEmailVerified) {
     throw new EmailNotVerifiedError("Email must be verified before purchasing tickets");
   }
+  const policy = paymentPolicy();
 
   const paystackReference = `TKT-${randomBytes(8).toString("hex")}`;
   const reservationExpiresAt = new Date(
@@ -40,14 +40,21 @@ export async function checkout(
     items: input.items,
     paystackReference,
     reservationExpiresAt,
+    split: { basisPoints: policy.basisPoints },
   });
 
   try {
+    if (order.platformFeeKobo === null || !order.paystackSubaccount) throw new Error("Order has no payout split");
+    const callbackUrl = new URL(`${env.FRONTEND_URL}/tickets/${encodeURIComponent(order.eventId)}/success`);
+    callbackUrl.searchParams.set("orderId", order.id);
     const authorizationUrl = await initializePaystackTransaction({
       email: userEmail,
       amount: order.totalKobo,
       reference: paystackReference,
-      callbackUrl: input.callbackUrl,
+      callbackUrl: callbackUrl.href,
+      subaccount: order.paystackSubaccount,
+      platformFeeKobo: order.platformFeeKobo,
+      bearer: policy.bearer,
     });
 
     logger.info("checkout: Paystack transaction initialized", {
@@ -64,23 +71,23 @@ export async function checkout(
       err,
     });
 
-    const orderWithItems = await getOrderWithItems(order.id);
-    if (orderWithItems) {
-      await releaseReservation(order.id, orderWithItems.items, "failed");
-    } else {
-      await updateOrderStatus(order.id, "failed");
-    }
+    await releaseReservation(order.id, "failed");
 
     throw new AppError(502, "Payment provider unavailable. Please try again shortly.");
   }
 }
 
-export async function getOrderStatus(orderId: string, buyerId: string): Promise<Order> {
+export async function getOrderStatus(orderId: string, buyerId: string): Promise<Omit<Order, "paystackSubaccount" | "platformFeeKobo">> {
   const order = await findOrderById(orderId, buyerId);
   if (!order) {
     throw new NotFoundError("Order not found");
   }
-  return order;
+  return {
+    id: order.id, buyerId: order.buyerId, eventId: order.eventId, totalKobo: order.totalKobo,
+    status: order.status, paystackReference: order.paystackReference,
+    reservationExpiresAt: order.reservationExpiresAt, createdAt: order.createdAt,
+    updatedAt: order.updatedAt, deletedAt: order.deletedAt,
+  };
 }
 
 export async function cleanupExpiredReservations(): Promise<{ processed: number }> {
@@ -89,10 +96,7 @@ export async function cleanupExpiredReservations(): Promise<{ processed: number 
   let processed = 0;
   for (const order of expired) {
     try {
-      const orderWithItems = await getOrderWithItems(order.id);
-      if (!orderWithItems) continue;
-      await releaseReservation(order.id, orderWithItems.items, "expired");
-      processed++;
+      if (await releaseReservation(order.id, "expired")) processed++;
     } catch (err) {
       logger.error("cleanupExpiredReservations: failed to release order", {
         orderId: order.id,
@@ -110,6 +114,9 @@ async function initializePaystackTransaction(input: {
   amount: number;
   reference: string;
   callbackUrl: string;
+  subaccount: string;
+  platformFeeKobo: number;
+  bearer: "account" | "subaccount";
 }): Promise<string> {
   const response = await fetch("https://api.paystack.co/transaction/initialize", {
     method: "POST",
@@ -122,12 +129,17 @@ async function initializePaystackTransaction(input: {
       amount: input.amount,
       reference: input.reference,
       callback_url: input.callbackUrl,
+      currency: "NGN",
+      subaccount: input.subaccount,
+      transaction_charge: input.platformFeeKobo,
+      bearer: input.bearer,
     }),
+    redirect: "error",
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "(no body)");
-    throw new Error(`Paystack /transaction/initialize returned ${response.status}: ${text}`);
+    throw new Error(`Paystack /transaction/initialize returned ${response.status}`);
   }
 
   const json = (await response.json()) as {
@@ -139,5 +151,9 @@ async function initializePaystackTransaction(input: {
     throw new Error("Paystack response missing authorization_url");
   }
 
-  return json.data.authorization_url;
+  const url = new URL(json.data.authorization_url);
+  if (url.origin !== "https://checkout.paystack.com" || url.username || url.password) {
+    throw new Error("Paystack checkout URL did not match the expected origin");
+  }
+  return url.href;
 }

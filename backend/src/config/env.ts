@@ -22,6 +22,12 @@ const envSchema = z.object({
   // PAYSTACK
   PAYSTACK_SECRET_KEY: z.string().min(1),
   PAYSTACK_PUBLIC_KEY: z.string().min(1),
+  PAYSTACK_PLATFORM_FEE_BPS: z.preprocess(
+    (value) => value === "" ? undefined : value, z.coerce.number().int().min(0).max(9999).optional()
+  ),
+  PAYSTACK_FEE_BEARER: z.preprocess(
+    (value) => value === "" ? undefined : value, z.enum(["account", "subaccount"]).optional()
+  ),
 
   // RESERVATION
   ORDER_RESERVATION_MINUTES: z.coerce.number().int().positive().default(15),

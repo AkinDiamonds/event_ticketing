@@ -19,6 +19,8 @@ export interface TicketEmailPayload {
   to: string;
   eventTitle: string;
   ticketCodes: string[];
+  eventId: string;
+  orderId: string;
 }
 
 export interface TicketWhatsAppPayload {
@@ -29,7 +31,9 @@ export interface TicketWhatsAppPayload {
 
 export async function sendTicketEmail(payload: TicketEmailPayload): Promise<void> {
   try {
-    const message = buildTicketEmail(payload.to, payload.eventTitle, payload.ticketCodes);
+    const orderUrl = new URL(`${env.FRONTEND_URL}/tickets/${encodeURIComponent(payload.eventId)}/ticket`);
+    orderUrl.searchParams.set("orderId", payload.orderId);
+    const message = buildTicketEmail(payload.to, payload.eventTitle, payload.ticketCodes, orderUrl.href);
     await emailSender.send(message);
   } catch (error) {
     logger.warn("Ticket email delivery failed", { error, to: payload.to });
@@ -48,7 +52,7 @@ export async function sendTicketWhatsApp(payload: TicketWhatsAppPayload): Promis
   }
 
   try {
-    const text = `Your tickets for "${payload.eventTitle}":\n\n${payload.ticketCodes
+    const text = `Your Event Tickets entry codes for "${payload.eventTitle}":\n\n${payload.ticketCodes
       .map((code, index) => `${index + 1}. ${code}`)
       .join("\n")}`;
 

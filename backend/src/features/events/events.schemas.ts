@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
+import { MINIMUM_NGN_CHARGE_KOBO } from "#features/payments/index.js";
 
 extendZodWithOpenApi(z);
 
@@ -18,8 +19,9 @@ export const tierIdParamsSchema = z.object({
 
 export const ticketTierInputSchema = z.object({
   name: nonEmptyText(100),
-  price: z.number().int().nonnegative().safe().max(2_147_483_647),
+  price: z.number().int().min(MINIMUM_NGN_CHARGE_KOBO, "Paid tickets must cost at least ₦50").safe().max(2_147_483_647),
   quantityAvailable: z.number().int().positive().safe().max(2_147_483_647),
+  isActive: z.boolean().optional(),
 });
 
 export const createEventSchema = z.object({
@@ -28,7 +30,7 @@ export const createEventSchema = z.object({
   bannerImageUrl: z.string().trim().url().max(2_048).nullable().optional(),
   venue: nonEmptyText(255),
   startsAt: utcDateTime,
-  tiers: z.array(ticketTierInputSchema).min(1).max(50),
+  tiers: z.array(ticketTierInputSchema).max(50).default([]),
 });
 
 export const updateEventSchema = z

@@ -20,6 +20,8 @@ export const orders = pgTable("orders", {
     .notNull()
     .references(() => events.id),
   totalKobo: integer("total_kobo").notNull(),
+  platformFeeKobo: integer("platform_fee_kobo"),
+  paystackSubaccount: varchar("paystack_subaccount", { length: 100 }),
   status: orderStatusEnum("status").notNull().default("pending"),
   paystackReference: varchar("paystack_reference", { length: 100 }).notNull().unique(),
   reservationExpiresAt: timestamp("reservation_expires_at", { withTimezone: true }).notNull(),

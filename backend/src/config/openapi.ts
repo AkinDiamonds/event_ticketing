@@ -16,7 +16,7 @@ export function createOpenApiDocument() {
   return generator.generateDocument({
     openapi: "3.0.0",
     info: {
-      title: "LASU Party Tickets API",
+      title: "Event Tickets API",
       version: "0.1.0",
     },
     servers: [{ url: "/" }],
