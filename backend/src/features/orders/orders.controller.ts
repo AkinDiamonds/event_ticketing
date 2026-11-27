@@ -19,8 +19,3 @@ export async function getOrder(req: Request, res: Response): Promise<void> {
   const result = await ordersService.getOrderStatus(orderId, req.user!.userId);
   sendSuccess(res, result, "Order retrieved");
 }
-
-export async function cleanupExpired(_req: Request, res: Response): Promise<void> {
-  const result = await ordersService.cleanupExpiredReservations();
-  sendSuccess(res, result, `Cleaned up ${result.processed} expired reservations`);
-}

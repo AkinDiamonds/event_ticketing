@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  boolean,
   index,
   integer,
   pgTable,
@@ -24,6 +25,7 @@ export const events = pgTable(
     bannerImageUrl: text("banner_image_url"),
     venue: varchar("venue", { length: 255 }).notNull(),
     startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    isPublished: boolean("is_published").notNull().default(false),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -43,6 +45,7 @@ export const ticketTiers = pgTable(
     quantityAvailable: integer("quantity_available").notNull(),
     quantityReserved: integer("quantity_reserved").notNull().default(0),
     quantitySold: integer("quantity_sold").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

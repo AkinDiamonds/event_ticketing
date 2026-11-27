@@ -4,6 +4,7 @@ import {
   loginSchema,
   refreshSchema,
   registerSchema,
+  resendVerificationEmailSchema,
   resetPasswordSchema,
   setWhatsAppSchema,
   verifyEmailSchema,
@@ -40,7 +41,10 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry): void {
     method: "post",
     path: "/api/v1/auth/login",
     request: { body: { content: { "application/json": { schema: loginSchema } } } },
-    responses: { 200: { description: "Login successful" } },
+    responses: {
+      200: { description: "Login successful" },
+      403: { description: "Email verification required (EMAIL_NOT_VERIFIED)" },
+    },
   });
   registry.registerPath({
     method: "post",
@@ -80,6 +84,14 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry): void {
   });
   registry.registerPath({
     method: "post",
+    path: "/api/v1/auth/resend-verification-email",
+    request: {
+      body: { content: { "application/json": { schema: resendVerificationEmailSchema } } },
+    },
+    responses: { 200: { description: "Verification link request accepted" } },
+  });
+  registry.registerPath({
+    method: "post",
     path: "/api/v1/auth/logout",
     security: [{ bearerAuth: [] }],
     request: { body: { content: { "application/json": { schema: refreshSchema } } } },
@@ -97,6 +109,13 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry): void {
     security: [{ bearerAuth: [] }],
     request: { body: { content: { "application/json": { schema: setWhatsAppSchema } } } },
     responses: { 200: { description: "WhatsApp number updated" } },
+  });
+
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/auth/me",
+    security: [{ bearerAuth: [] }],
+    responses: { 200: { description: "Current account and organizer access" } },
   });
 
   registry.registerComponent("securitySchemes", "bearerAuth", {

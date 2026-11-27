@@ -6,9 +6,10 @@ import {
   findTicketByCode,
   fulfillOrder,
   getOrderWithItems,
-  updateOrderStatus,
+  markPaymentException,
+  type Order,
   type TicketInsert,
-} from "#features/orders/orders.repository.js";
+} from "#features/orders/index.js";
 import { findUserById } from "#features/auth/index.js";
 import { findEventById } from "#features/events/index.js";
 import { sendTicketEmail, sendTicketWhatsApp } from "#features/notifications/index.js";
@@ -16,21 +17,18 @@ import { sendTicketEmail, sendTicketWhatsApp } from "#features/notifications/ind
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 
+type FulfilledOrder = {
+  order: Order;
+  ticketCodes: string[];
+};
+
 export function verifyWebhookSignature(rawBody: Buffer, signature: string): boolean {
-  const hash = createHmac("sha512", env.PAYSTACK_SECRET_KEY).update(rawBody).digest("hex");
-  try {
-    const hashBuf = Buffer.from(hash, "hex");
-    const sigBuf = Buffer.from(signature, "hex");
-    if (hashBuf.length === 0 || hashBuf.length !== sigBuf.length) {
-      return false;
-    }
-    return timingSafeEqual(hashBuf, sigBuf);
-  } catch {
-    return false;
-  }
+  if (!/^[a-f0-9]{128}$/i.test(signature)) return false;
+  const hash = createHmac("sha512", env.PAYSTACK_SECRET_KEY).update(rawBody).digest();
+  return timingSafeEqual(hash, Buffer.from(signature, "hex"));
 }
 
-export async function handleChargeSuccess(reference: string): Promise<void> {
+export async function handleChargeSuccess(reference: string): Promise<FulfilledOrder | undefined> {
   const order = await findOrderByReference(reference);
 
   if (!order) {
@@ -38,41 +36,10 @@ export async function handleChargeSuccess(reference: string): Promise<void> {
     return;
   }
 
-  if (order.status === "paid") {
-    logger.info("handleChargeSuccess: duplicate webhook ignored (already paid)", {
-      orderId: order.id,
-      reference,
-    });
-    return;
-  }
+  if (order.status === "paid" || order.status === "payment_exception") return;
+  const verified = await verifyPaystackTransaction(reference);
 
-  if (order.status !== "pending") {
-    logger.warn("handleChargeSuccess: order in unexpected status, skipping fulfillment", {
-      orderId: order.id,
-      reference,
-      status: order.status,
-    });
-    return;
-  }
-
-  // Independent verification — never trust the webhook body amount alone.
-  let verified: { status: string; amount: number };
-  try {
-    verified = await verifyPaystackTransaction(reference);
-  } catch (err) {
-    logger.error("handleChargeSuccess: Paystack verify call failed", { reference, err });
-    return;
-  }
-
-  if (verified.status !== "success") {
-    logger.warn("handleChargeSuccess: Paystack reports payment not successful", {
-      reference,
-      paystackStatus: verified.status,
-    });
-    return;
-  }
-
-  if (verified.amount !== order.totalKobo) {
+  if (verified.amount !== order.totalKobo || (order.paystackSubaccount && verified.currency !== "NGN")) {
     logger.error(
       "handleChargeSuccess: amount mismatch — possible price manipulation, marking payment_exception",
       {
@@ -82,30 +49,22 @@ export async function handleChargeSuccess(reference: string): Promise<void> {
         received: verified.amount,
       }
     );
-    await updateOrderStatus(order.id, "payment_exception");
+    await markPaymentException(order.id);
     return;
   }
 
-  if (order.reservationExpiresAt < new Date()) {
-    logger.error(
-      "handleChargeSuccess: reservation expired before payment verified, marking payment_exception",
-      {
-        reference,
-        orderId: order.id,
-        reservationExpiresAt: order.reservationExpiresAt,
-      }
-    );
-    await updateOrderStatus(order.id, "payment_exception");
+  if (order.status !== "pending" || verified.paidAt > order.reservationExpiresAt) {
+    await markPaymentException(order.id);
     return;
   }
 
   const orderWithItems = await getOrderWithItems(order.id);
-  if (!orderWithItems) {
+  if (!orderWithItems?.items.length) {
     logger.error("handleChargeSuccess: order items not found, marking payment_exception", {
       orderId: order.id,
       reference,
     });
-    await updateOrderStatus(order.id, "payment_exception");
+    await markPaymentException(order.id);
     return;
   }
 
@@ -124,37 +83,24 @@ export async function handleChargeSuccess(reference: string): Promise<void> {
     }
   }
 
-  try {
-    await fulfillOrder(order.id, ticketsToInsert);
-    logger.info("handleChargeSuccess: order fulfilled successfully", {
-      orderId: order.id,
-      reference,
-      ticketCount: ticketsToInsert.length,
-    });
-  } catch (err) {
-    logger.error(
-      "handleChargeSuccess: FULFILLMENT_FAILED_AFTER_PAYMENT — manual remediation required",
-      {
-        orderId: order.id,
-        reference,
-        err,
-      }
-    );
-    // Leave order as pending so a retry can attempt fulfillment again.
-    // Do not mark as payment_exception unless we are certain money was lost.
-    return;
+  const createdTickets = await fulfillOrder(order.id, ticketsToInsert, verified.paidAt);
+  if (createdTickets.length) {
+    return { order, ticketCodes: createdTickets.map((ticket) => ticket.code) };
   }
+}
 
+export async function notifyBuyer({ order, ticketCodes }: FulfilledOrder): Promise<void> {
   const buyer = await findUserById(order.buyerId);
   if (buyer) {
     const event = await findEventById(order.eventId);
     const eventTitle = event?.title ?? "Your Event";
-    const ticketCodes = ticketsToInsert.map((t) => t.code);
 
     await sendTicketEmail({
       to: buyer.email,
       eventTitle,
       ticketCodes,
+      eventId: order.eventId,
+      orderId: order.id,
     });
 
     await sendTicketWhatsApp({
@@ -166,13 +112,15 @@ export async function handleChargeSuccess(reference: string): Promise<void> {
 }
 
 async function verifyPaystackTransaction(reference: string): Promise<{
-  status: string;
   amount: number;
+  paidAt: Date;
+  currency?: string | undefined;
 }> {
   const response = await fetch(
     `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
     {
       headers: { Authorization: `Bearer ${env.PAYSTACK_SECRET_KEY}` },
+      signal: AbortSignal.timeout(8000),
     }
   );
 
@@ -182,14 +130,17 @@ async function verifyPaystackTransaction(reference: string): Promise<{
 
   const json = (await response.json()) as {
     status: boolean;
-    data: { status: string; amount: number };
+    data?: { status?: string; amount?: number; paid_at?: string; paidAt?: string; currency?: string };
   };
 
-  if (!json.status || !json.data) {
-    throw new Error("Paystack /verify response malformed");
+  const { status, amount, paid_at, paidAt: alternateTime, currency } = json.data ?? {};
+  const paidAt = new Date(paid_at ?? alternateTime ?? "");
+  if (!json.status || status !== "success" || typeof amount !== "number"
+    || !Number.isSafeInteger(amount) || !Number.isFinite(paidAt.getTime())) {
+    throw new Error("Paystack /verify did not confirm the payment");
   }
 
-  return { status: json.data.status, amount: json.data.amount };
+  return { amount, paidAt, currency };
 }
 
 function generateCode(): string {

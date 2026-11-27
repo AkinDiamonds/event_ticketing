@@ -9,6 +9,7 @@ import {
   setWhatsAppSender as setNotificationsWhatsAppSender,
 } from "#features/notifications/index.js";
 import { setEmailSender as setAuthEmailSender } from "#features/auth/index.js";
+import { cleanupExpiredReservations } from "#features/orders/index.js";
 
 if (env.NODE_ENV !== "test") {
   const emailSender = createEmailSender();
@@ -26,12 +27,25 @@ const server = app.listen(env.PORT, () => {
   logger.info(`Server running on port ${env.PORT}`, { port: env.PORT, env: env.NODE_ENV });
 });
 
+let cleanupTask: Promise<void> | undefined;
+function runReservationCleanup(): void {
+  if (cleanupTask) return;
+  cleanupTask = cleanupExpiredReservations()
+    .then(() => undefined)
+    .catch((error: unknown) => { logger.error("Reservation cleanup failed", { error }); })
+    .finally(() => { cleanupTask = undefined; });
+}
+
+const cleanupTimer = setInterval(runReservationCleanup, 60_000).unref();
+runReservationCleanup();
+
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal: string): void {
   logger.info(`${signal} received, shutting down gracefully`);
+  clearInterval(cleanupTimer);
 
   server.close(() => {
-    void closeDb().then(() => {
+    void Promise.resolve(cleanupTask).then(closeDb).then(() => {
       logger.info("Shutdown complete");
       process.exit(0);
     });

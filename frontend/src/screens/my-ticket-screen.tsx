@@ -18,23 +18,32 @@ export type TicketDetails = {
 type Props = {
   backHref: string
   ordersHref: string
-  status: 'loading' | 'ready' | 'missing' | 'error'
   ticket?: TicketDetails
-}
+} & (
+  | { status: 'sign-in'; signInHref: string }
+  | { status: 'loading' | 'ready' | 'missing' | 'error'; signInHref?: string }
+)
 
-export function MyTicketScreen({ backHref, ordersHref, status, ticket }: Props) {
+export function MyTicketScreen({ backHref, ordersHref, status, ticket, signInHref }: Props) {
   return (
     <div className="pb-10">
       <TopBar narrow backHref={backHref} shareHref={status === 'ready' ? window.location.href : undefined} />
       <div className="flow-width pt-3 md:pt-7">
         <h1 className="page-title">My Ticket</h1>
         {status === 'loading' ? <p role="status" className="mt-5 text-sm text-muted">Loading ticket order…</p> : null}
-        {status === 'error' ? <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Could not load this paid order. Check your order reference and try again.</p> : null}
+        {status === 'sign-in' ? (
+          <Card className="mt-5 p-7 text-center">
+            <h2 className="font-bold">Sign in to view your order</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">Use the account you bought the tickets with.</p>
+            <Button className="mt-5" href={signInHref}>Log in</Button>
+          </Card>
+        ) : null}
+        {status === 'error' ? <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">Could not open this paid order. Check that you’re using the link from your confirmation email and the account you paid with.</p> : null}
         {status === 'missing' ? (
           <Card className="mt-5 p-7 text-center">
             <TicketsIcon className="mx-auto size-8 text-forest" />
             <h2 className="mt-3 font-bold">Open a confirmed order</h2>
-            <p className="mt-2 text-sm leading-6 text-muted">Open View Ticket from the payment confirmation screen. Your entry code is sent by email.</p>
+            <p className="mt-2 text-sm leading-6 text-muted">Open your order from the payment confirmation screen or the confirmation email. Your entry codes are in the email.</p>
             <Button className="mt-5" href="/tickets">Browse Events</Button>
           </Card>
         ) : null}
@@ -58,7 +67,7 @@ export function MyTicketScreen({ backHref, ordersHref, status, ticket }: Props) 
                     <dd className="mt-1 text-sm font-semibold break-all">{ticket.reference}</dd>
                   </div>
                 </dl>
-                <p className="mt-4 rounded-lg bg-mint p-3 text-xs leading-5 text-forest">Use the ticket code from your confirmation email when you arrive.</p>
+                <p className="mt-4 rounded-lg bg-mint p-3 text-xs leading-5 text-forest">Show the entry codes from your confirmation email at the venue.</p>
               </div>
             </div>
             <div className="no-print mt-4 grid grid-cols-2 gap-3">

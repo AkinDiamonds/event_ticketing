@@ -9,7 +9,9 @@ npm ci
 npm run dev
 ```
 
-Run `npm run lint` to check the source and `npm run build` to produce the static site in `dist/`. Run `npm run preview` to preview that build locally.
+`npm run dev` uses localhost and reads the API port from `backend/.env`, falling back to port 3000. Restart Vite after changing that port. Set `VITE_API_BASE_URL` in `.env.development.local` to use a different API origin.
+
+Run `npm run lint` to check the source. `npm run build` produces a production build in `dist/` with the hosted API URL. `npm run preview` serves whichever build is in `dist/`. To preview a build against the local API, run `npm run build -- --mode development` before starting preview.
 
 ## Deployment
 

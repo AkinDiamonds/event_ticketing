@@ -8,6 +8,7 @@ export type EventTier = {
   quantityAvailable: number
   quantityRemaining?: number
   quantitySold?: number
+  quantityReserved?: number
   isActive?: boolean
   description?: string
 }
@@ -19,10 +20,12 @@ export type EventRecord = {
   bannerImageUrl?: string
   venue?: string
   startsAt?: string
+  isPublished?: boolean
+  sales?: { grossKobo: number; platformFeeKobo: number }
   tiers: EventTier[]
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   readonly status: number
 
   constructor(message: string, status: number) {
@@ -60,6 +63,7 @@ function normalizeEvent(value: unknown): EventRecord {
       quantityAvailable: Number(tier.quantityAvailable ?? tier.quantity),
       quantityRemaining: typeof tier.quantityRemaining === 'number' ? tier.quantityRemaining : undefined,
       quantitySold: typeof tier.quantitySold === 'number' ? tier.quantitySold : undefined,
+      quantityReserved: typeof tier.quantityReserved === 'number' ? tier.quantityReserved : undefined,
       isActive: typeof tier.isActive === 'boolean' ? tier.isActive : undefined,
       description: typeof tier.description === 'string' ? tier.description : undefined,
     }
@@ -71,6 +75,8 @@ function normalizeEvent(value: unknown): EventRecord {
     bannerImageUrl: typeof event.bannerImageUrl === 'string' ? event.bannerImageUrl : undefined,
     venue: typeof event.venue === 'string' ? event.venue : undefined,
     startsAt: typeof event.startsAt === 'string' ? event.startsAt : typeof event.startAt === 'string' ? event.startAt : undefined,
+    isPublished: typeof event.isPublished === 'boolean' ? event.isPublished : undefined,
+    sales: record.sales as EventRecord['sales'],
     tiers: tiers.filter((tier) => tier.id && tier.name && Number.isFinite(tier.price) && tier.price >= 0 && Number.isFinite(tier.quantityAvailable) && tier.quantityAvailable >= 0),
   }
 }
@@ -89,6 +95,11 @@ export async function getEvents(page = 1, limit = 20) {
   return unwrapList(data).map(normalizeEvent).filter((event) => event.id && event.title)
 }
 
+export async function getOrganizerEvents(page: number) {
+  const data = await request<{ items: unknown[]; pagination: { totalPages: number } }>(`/events/organizer?page=${page}`)
+  return { items: data.items.map(normalizeEvent), totalPages: data.pagination.totalPages }
+}
+
 export async function getEvent(eventId: string) {
   const data = await request<unknown>(`/events/${encodeURIComponent(eventId)}`)
   const event = normalizeEvent(data)
@@ -97,13 +108,7 @@ export async function getEvent(eventId: string) {
 }
 
 export async function getOrganizerEvent(eventId: string) {
-  try {
-    return normalizeEvent(await request<unknown>(`/events/${encodeURIComponent(eventId)}/tiers`))
-  } catch (cause) {
-    // Older deployments return an unstructured 404 for the new organizer route.
-    if (!(cause instanceof ApiError) || cause.status !== 404 || cause.message !== 'Request failed (404)') throw cause
-    return getEvent(eventId)
-  }
+  return normalizeEvent(await request<unknown>(`/events/organizer/${encodeURIComponent(eventId)}`))
 }
 
 export type CreateEventInput = {
@@ -112,13 +117,33 @@ export type CreateEventInput = {
   bannerImageUrl?: string | null
   venue: string
   startsAt: string
-  tiers: { name: string; price: number; quantityAvailable: number }[]
 }
+
+type TicketTierInput = { name: string; price: number; quantityAvailable: number; isActive: boolean }
 
 export async function createEvent(input: CreateEventInput) {
   const data = await request<unknown>('/events', { method: 'POST', body: JSON.stringify(input) })
   return normalizeEvent(data)
 }
+
+export async function publishEvent(eventId: string) {
+  return request<unknown>(`/events/${encodeURIComponent(eventId)}/publish`, { method: 'POST' })
+}
+
+const payoutsPath = '/payments/organizer/payouts'
+export type PayoutAccount = { accountName: string; bankCode: string; accountLast4: string }
+export type PayoutSettlement = { amountKobo: number; status: 'pending' | 'success' | 'failed'; date: string }
+type BankDetails = { bankCode: string; accountNumber: string }
+
+export const getPayoutAccount = () => request<PayoutAccount | null>(payoutsPath)
+export const getPayoutBanks = () => request<{ code: string; name: string }[]>(payoutsPath + '/banks')
+export const getPayoutTerms = () => request<{ basisPoints: number; bearer: 'account' | 'subaccount' } | null>(payoutsPath + '/terms')
+export const getPayoutSettlements = () => request<PayoutSettlement[]>(payoutsPath + '/settlements')
+export const resolvePayoutAccount = (details: BankDetails) => request<{ accountName: string }>(payoutsPath + '/resolve', {
+  method: 'POST', body: JSON.stringify(details),
+})
+export const confirmPayoutAccount = (details: BankDetails & { businessName: string; accountName: string; password: string }) =>
+  request<PayoutAccount>(payoutsPath, { method: 'POST', body: JSON.stringify(details) })
 
 export async function updateEvent(eventId: string, input: Partial<CreateEventInput>) {
   return request<unknown>(`/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', body: JSON.stringify(input) })
@@ -128,12 +153,12 @@ export async function deleteEvent(eventId: string) {
   return request<unknown>(`/events/${encodeURIComponent(eventId)}`, { method: 'DELETE' })
 }
 
-export async function addEventTier(eventId: string, tier: CreateEventInput['tiers'][number]) {
-  return request<unknown>(`/events/${encodeURIComponent(eventId)}/tiers`, { method: 'POST', body: JSON.stringify(tier) })
+export async function addEventTier(eventId: string, tier: TicketTierInput) {
+  return request<EventTier>(`/events/${encodeURIComponent(eventId)}/tiers`, { method: 'POST', body: JSON.stringify(tier) })
 }
 
-export async function updateEventTier(eventId: string, tierId: string, tier: Partial<CreateEventInput['tiers'][number]> & { isActive?: boolean }) {
-  return request<unknown>(`/events/${encodeURIComponent(eventId)}/tiers/${encodeURIComponent(tierId)}`, { method: 'PATCH', body: JSON.stringify(tier) })
+export async function updateEventTier(eventId: string, tierId: string, tier: Partial<TicketTierInput>) {
+  return request<EventTier>(`/events/${encodeURIComponent(eventId)}/tiers/${encodeURIComponent(tierId)}`, { method: 'PATCH', body: JSON.stringify(tier) })
 }
 
 export async function deleteEventTier(eventId: string, tierId: string) {
@@ -147,7 +172,6 @@ export async function checkInTicket(eventId: string, code: string) {
 export type CheckoutInput = {
   eventId: string
   items: { tierId: string; quantity: number }[]
-  callbackUrl: string
 }
 
 export async function checkout(input: CheckoutInput) {
@@ -156,8 +180,4 @@ export async function checkout(input: CheckoutInput) {
 
 export async function getOrder(orderId: string) {
   return request<unknown>(`/orders/${encodeURIComponent(orderId)}`)
-}
-
-export async function cleanupExpiredOrders() {
-  return request<unknown>('/orders/admin/cleanup-expired', { method: 'POST' })
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card } from '../components/card'
+import { Button } from '../components/button'
 import { BottomNav, TopBar } from '../components/navbar'
 import { ArrowRightIcon, CalendarIcon, LocationIcon } from '../components/icons'
 import { SearchField } from '../components/form'
@@ -56,7 +57,10 @@ export function HomeScreen({ browseOnly = false }: { browseOnly?: boolean }) {
       <TopBar menu />
       {browseOnly ? (
         <div className="page-width pt-4 pb-4 md:pt-10">
-          <h1 className="page-title mb-5">Browse Events</h1>
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="page-title">Browse Events</h1>
+            <Button href="/events/create" size="sm" variant="accent">+ Create event</Button>
+          </div>
           <SearchField value={query} onChange={setQuery} desktopButton />
         </div>
       ) : (

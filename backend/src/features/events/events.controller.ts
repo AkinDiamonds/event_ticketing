@@ -22,12 +22,32 @@ export async function getEvent(req: Request, res: Response): Promise<void> {
   sendSuccess(res, result, "Event retrieved successfully");
 }
 
+export async function listOrganizerEvents(req: Request, res: Response): Promise<void> {
+  const result = await eventsService.listEvents(
+    req.query as unknown as ListEventsQuery, req.user!.userId
+  );
+  res.set("Cache-Control", "no-store");
+  sendSuccess(res, result, "Organizer events retrieved");
+}
+
+export async function getOrganizerEvent(req: Request, res: Response): Promise<void> {
+  const { eventId } = req.params as { eventId: string };
+  const result = await eventsService.getOrganizerEvent(eventId, req.user!.userId);
+  res.set("Cache-Control", "no-store");
+  sendSuccess(res, result, "Organizer event retrieved");
+}
+
 export async function createEvent(req: Request, res: Response): Promise<void> {
   const result = await eventsService.createEvent(
     req.user!.userId,
     req.body as CreateEventInput
   );
   sendSuccess(res, result, "Event created successfully", 201);
+}
+
+export async function publishEvent(req: Request, res: Response): Promise<void> {
+  const { eventId } = req.params as { eventId: string };
+  sendSuccess(res, await eventsService.publishEvent(eventId, req.user!.userId), "Event published");
 }
 
 export async function updateEvent(req: Request, res: Response): Promise<void> {

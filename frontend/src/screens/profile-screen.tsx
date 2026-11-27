@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card } from '../components/card'
 import { Button } from '../components/button'
 import { BottomNav, TopBar } from '../components/navbar'
 import { OrdersIcon, TicketsIcon, ProfileIcon } from '../components/icons'
 import { useRouter } from '../router'
-import { logout } from '../lib/auth-api'
+import { getCurrentAccount, logout } from '../lib/auth-api'
 
 type ProfileScreenProps = {
   backHref: string
@@ -15,9 +15,21 @@ type ProfileScreenProps = {
 export function ProfileScreen({ backHref, ordersHref, adminHref }: ProfileScreenProps) {
   const { navigate } = useRouter()
   const [loggingOut, setLoggingOut] = useState(false)
+  const [isOrganizer, setIsOrganizer] = useState(false)
   const isAuthenticated = Boolean(localStorage.getItem('lasu_access_token'))
   const email = localStorage.getItem('lasu_profile_email')
   const name = localStorage.getItem('lasu_profile_name')
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    let active = true
+    getCurrentAccount().then((account) => {
+      if (active) setIsOrganizer(account.isOrganizer)
+    }).catch(() => {
+      if (active) setIsOrganizer(false)
+    })
+    return () => { active = false }
+  }, [isAuthenticated])
 
   async function handleLogout() {
     setLoggingOut(true)
@@ -63,10 +75,12 @@ export function ProfileScreen({ backHref, ordersHref, adminHref }: ProfileScreen
             <OrdersIcon className="h-5 w-5" />
             My Orders
           </Button>
-          <Button variant="secondary" className="w-full justify-start" href={adminHref}>
-            <TicketsIcon className="h-5 w-5" />
-            Organizer Workspace
-          </Button>
+          {isAuthenticated && isOrganizer ? (
+            <Button variant="secondary" className="w-full justify-start" href={adminHref}>
+              <TicketsIcon className="h-5 w-5" />
+              Organizer Workspace
+            </Button>
+          ) : null}
           {isAuthenticated ? (
             <button
               type="button"

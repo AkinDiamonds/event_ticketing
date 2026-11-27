@@ -1,20 +1,18 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: event_ticketing_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Load backend/.env with --env-file}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Load backend/.env with --env-file}
+      POSTGRES_DB: ${DB_NAME:?Load backend/.env with --env-file}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - event_ticketing_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -38,11 +38,42 @@ export function registerEventsOpenApi(registry: OpenAPIRegistry): void {
     responses: { 200: { description: "Event retrieved successfully" } },
   });
   registry.registerPath({
+    method: "get",
+    path: "/api/v1/events/organizer",
+    security: [{ bearerAuth: [] }],
+    request: { query: listEventsQuerySchema },
+    responses: { 200: { description: "Events owned by the current organizer" } },
+  });
+  registry.registerPath({
+    method: "get",
+    path: "/api/v1/events/organizer/{eventId}",
+    security: [{ bearerAuth: [] }],
+    request: { params: eventIdParamsSchema },
+    responses: {
+      200: { description: "Owned event and ticket tier inventory" },
+      404: { description: "Event not found" },
+    },
+  });
+  registry.registerPath({
     method: "post",
     path: "/api/v1/events",
     security: [{ bearerAuth: [] }],
     request: jsonBody(createEventSchema),
-    responses: { 201: { description: "Event created successfully" } },
+    responses: {
+      201: { description: "Private event draft created and workspace enabled" },
+      403: { description: "Verified, eligible account required" },
+    },
+  });
+  registry.registerPath({
+    method: "post",
+    path: "/api/v1/events/{eventId}/publish",
+    security: [{ bearerAuth: [] }],
+    request: { params: eventIdParamsSchema },
+    responses: {
+      200: { description: "Event published" },
+      404: { description: "Event not found" },
+      409: { description: "A payout account and an enabled paid tier are required" },
+    },
   });
   registry.registerPath({
     method: "patch",

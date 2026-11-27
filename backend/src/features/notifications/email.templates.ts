@@ -33,7 +33,7 @@ function baseLayout(title: string, bodyContent: string): string {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Party Tickets</h1>
+      <h1>Event Tickets</h1>
     </div>
     <div class="content">
       ${bodyContent}
@@ -51,17 +51,16 @@ export function buildVerificationEmail(to: string, verificationUrl: string): Ema
     throw new Error("Invalid verification URL scheme; must be http or https");
   }
 
-  const subject = "Verify your email - Party Tickets";
-  const text = `Welcome to Party Tickets!\n\nClick the link below to verify your email address:\n${verificationUrl}\n\nThis link will expire shortly. If you did not create an account, you can safely ignore this email.`;
+  const subject = "Verify your email - Event Tickets";
+  const text = `Welcome to Event Tickets!\n\nVerify your email to activate your account.\n${verificationUrl}\n\nThis link will expire shortly. If you did not create an account, you can ignore this email.`;
   const safeUrl = escapeHtml(verificationUrl);
   const html = baseLayout(
     "Verify Your Email",
-    `<h2>Welcome!</h2>
-     <p>Thank you for signing up with Party Tickets. Click the button below to verify your email address and activate your account:</p>
+    `<h2>Verify your email</h2>
+     <p>Welcome to Event Tickets. Verify your email to activate your account.</p>
      <div style="text-align:center;margin:32px 0;">
        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2b6cb0;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:600;">Verify Email</a>
      </div>
-     <p style="font-size:13px;color:#718096;">Or copy and paste this link into your browser:<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#2b6cb0;word-break:break-all;">${safeUrl}</a></p>
      <p>This link will expire shortly.</p>`
   );
 
@@ -73,18 +72,17 @@ export function buildPasswordResetEmail(to: string, resetUrl: string): EmailMess
     throw new Error("Invalid password reset URL scheme; must be http or https");
   }
 
-  const subject = "Reset your password - Party Tickets";
-  const text = `You requested a password reset for Party Tickets.\n\nClick the link below to set a new password:\n${resetUrl}\n\nThis link will expire shortly. If you did not request a password reset, please secure your account immediately.`;
+  const subject = "Reset your password - Event Tickets";
+  const text = `Use the link below to set a new password for your Event Tickets account.\n${resetUrl}\n\nThis link will expire shortly. If you did not request a password reset, you can ignore this email.`;
   const safeUrl = escapeHtml(resetUrl);
   const html = baseLayout(
     "Reset Your Password",
-    `<h2>Password Reset Request</h2>
-     <p>We received a request to reset your password. Click the button below to set a new password:</p>
+    `<h2>Reset your password</h2>
+     <p>Use the button below to set a new password for your Event Tickets account.</p>
      <div style="text-align:center;margin:32px 0;">
        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2b6cb0;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:600;">Reset Password</a>
      </div>
-     <p style="font-size:13px;color:#718096;">Or copy and paste this link into your browser:<br><a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#2b6cb0;word-break:break-all;">${safeUrl}</a></p>
-     <p>This link will expire shortly. If you did not request this, please ignore this email.</p>`
+     <p>This link will expire shortly.</p>`
   );
 
   return { to, subject, text, html };
@@ -93,14 +91,20 @@ export function buildPasswordResetEmail(to: string, resetUrl: string): EmailMess
 export function buildTicketEmail(
   to: string,
   eventTitle: string,
-  ticketCodes: string[]
+  ticketCodes: string[],
+  orderUrl: string
 ): EmailMessage {
-  const subject = `Your Tickets for ${eventTitle}`;
-  const text = `Congratulations! Your purchase for "${eventTitle}" was successful.\n\nYour Ticket Code(s):\n${ticketCodes
+  if (!/^https?:\/\//i.test(orderUrl)) {
+    throw new Error("Invalid order URL scheme; must be http or https");
+  }
+
+  const subject = `Your tickets for ${eventTitle} - Event Tickets`;
+  const text = `Your Event Tickets purchase for "${eventTitle}" is confirmed.\n\nEntry codes:\n${ticketCodes
     .map((code, index) => `${index + 1}. ${code}`)
-    .join("\n")}\n\nPlease present these codes at the event venue.`;
+    .join("\n")}\n\nShow these codes at the venue.\n\nView your paid order:\n${orderUrl}`;
 
   const safeTitle = escapeHtml(eventTitle);
+  const safeUrl = escapeHtml(orderUrl);
   const codeListHtml = ticketCodes
     .map(
       (code, index) =>
@@ -115,7 +119,10 @@ export function buildTicketEmail(
      <ul style="list-style: none; padding-left: 0;">
        ${codeListHtml}
      </ul>
-     <p>Please present these ticket codes at the venue entry.</p>`
+     <p>Show these codes at the venue.</p>
+     <div style="text-align:center;margin:32px 0;">
+       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#2b6cb0;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:600;">View Order</a>
+     </div>`
   );
 
   return { to, subject, text, html };

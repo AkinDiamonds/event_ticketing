@@ -34,13 +34,4 @@ export function registerOrdersOpenApi(registry: OpenAPIRegistry): void {
     },
   });
 
-  registry.registerPath({
-    method: "post",
-    path: "/api/v1/orders/admin/cleanup-expired",
-    security: [{ bearerAuth: [] }],
-    responses: {
-      200: { description: "Cleaned up expired reservations" },
-      403: { description: "Organizer role required" },
-    },
-  });
 }

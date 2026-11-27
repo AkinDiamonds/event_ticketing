@@ -33,7 +33,7 @@ export default function TicketPaymentPage({ params }: { params: Record<string, s
     setError('')
     setLoading(true)
     try {
-      const result = await checkout({ eventId: draft.event.id, items: [{ tierId: draft.tierId, quantity: draft.quantity }], callbackUrl: `${window.location.origin}/tickets/${encodeURIComponent(params.id)}/success` })
+      const result = await checkout({ eventId: draft.event.id, items: [{ tierId: draft.tierId, quantity: draft.quantity }] })
       setBlocked(true)
       const paymentUrl = findString(result, ['authorizationUrl', 'authorization_url', 'paymentUrl', 'payment_url', 'checkoutUrl', 'checkout_url', 'url'])
       const orderId = findString(result, ['orderId', 'order_id', 'id', '_id'])

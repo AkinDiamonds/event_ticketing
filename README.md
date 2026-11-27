@@ -16,13 +16,13 @@ See the [frontend README](frontend/README.md) for API configuration and build co
 ```bash
 # install
 cd backend
-cp .env.example .env.local    # fill in local values — see ../backend-technical-documentation.md, Section 4
+cp .env.example .env          # for a new setup, then fill in local values
 npm install
-docker compose -f ../docker-compose.yml up -d postgres
+docker compose -f ../docker-compose.yml --env-file .env up -d --wait postgres
 npm run db:migrate
 
 # run
-npm run dev              # http://localhost:3000 — Swagger UI at /api/docs
+npm run dev              # Uses PORT from .env. Swagger UI is at /api/docs.
 
 # verify (starts and removes disposable test Postgres automatically)
 npm run verify

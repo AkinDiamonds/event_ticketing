@@ -12,7 +12,7 @@ export function MyOrdersScreen({ backHref }: { backHref: string }) {
         <Card className="mt-6 flex flex-col items-center p-7 text-center md:p-9">
           <span className="grid size-12 place-items-center rounded-xl bg-mint text-forest"><OrdersIcon className="size-6" /></span>
           <h2 className="mt-4 font-bold">Find a confirmed order</h2>
-          <p className="mt-2 max-w-[40ch] text-sm leading-6 text-muted">Open your order from the payment confirmation screen. Your ticket code is sent to the email on your account.</p>
+          <p className="mt-2 max-w-[40ch] text-sm leading-6 text-muted">Open your order from the payment confirmation screen or the confirmation email. Your entry codes are in the email.</p>
           <Button className="mt-5" href="/tickets">Browse Events</Button>
         </Card>
       </div>

@@ -42,7 +42,7 @@ export class ForbiddenError extends AppError {
  */
 export class EmailNotVerifiedError extends AppError {
   constructor(message = "Email address not verified") {
-    super(403, message);
+    super(403, message, [{ code: "EMAIL_NOT_VERIFIED" }]);
   }
 }
 

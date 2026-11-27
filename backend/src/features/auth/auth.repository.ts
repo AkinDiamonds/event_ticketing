@@ -1,5 +1,6 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { getDb } from "#config/db.js";
+import { UnauthorizedError } from "#shared/utils/errors.js";
 import {
   emailVerificationTokens,
   passwordResetTokens,
@@ -9,18 +10,8 @@ import {
 
 export type User = typeof users.$inferSelect;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
-export type AuthTransaction = Parameters<
-  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
->[0];
-
-export async function promoteUserToOrganizer(
-  tx: AuthTransaction,
-  userId: string
-): Promise<void> {
-  await tx
-    .update(users)
-    .set({ isOrganizer: true, updatedAt: new Date() })
-    .where(and(eq(users.id, userId), isNull(users.deletedAt)));
+export function isApprovedOrganizer(user: User): boolean {
+  return user.isEmailVerified && user.organizerApprovedAt !== null && user.organizerSuspendedAt === null && user.deletedAt === null;
 }
 
 export async function findUserByEmail(email: string): Promise<User | undefined> {
@@ -101,20 +92,31 @@ export async function completeEmailVerification(
   tokenId: string
 ): Promise<User> {
   return getDb().transaction(async (tx) => {
+    const now = new Date();
     const [user] = await tx
       .update(users)
-      .set({ isEmailVerified: true, updatedAt: new Date() })
-      .where(eq(users.id, userId))
+      .set({ isEmailVerified: true, updatedAt: now })
+      .where(and(eq(users.id, userId), eq(users.isEmailVerified, false), isNull(users.deletedAt)))
       .returning();
 
     if (!user) {
-      throw new Error("User not found during verification");
+      throw new UnauthorizedError("Invalid or expired verification token");
     }
 
-    await tx
+    const [token] = await tx
       .update(emailVerificationTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(emailVerificationTokens.id, tokenId));
+      .set({ usedAt: now })
+      .where(and(
+        eq(emailVerificationTokens.id, tokenId),
+        eq(emailVerificationTokens.userId, userId),
+        isNull(emailVerificationTokens.usedAt),
+        gt(emailVerificationTokens.expiresAt, now)
+      ))
+      .returning({ id: emailVerificationTokens.id });
+
+    if (!token) {
+      throw new UnauthorizedError("Invalid or expired verification token");
+    }
 
     return user;
   });
@@ -250,14 +252,26 @@ export async function completePasswordReset(input: {
   passwordHash: string;
 }): Promise<void> {
   await getDb().transaction(async (tx) => {
+    const now = new Date();
+    const [token] = await tx
+      .update(passwordResetTokens)
+      .set({ usedAt: now })
+      .where(and(
+        eq(passwordResetTokens.id, input.tokenId),
+        eq(passwordResetTokens.userId, input.userId),
+        isNull(passwordResetTokens.usedAt),
+        gt(passwordResetTokens.expiresAt, now)
+      ))
+      .returning({ id: passwordResetTokens.id });
+
+    if (!token) {
+      throw new UnauthorizedError("Invalid or expired password reset token");
+    }
+
     await tx
       .update(users)
-      .set({ passwordHash: input.passwordHash, updatedAt: new Date() })
+      .set({ passwordHash: input.passwordHash, updatedAt: now })
       .where(eq(users.id, input.userId));
-    await tx
-      .update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.id, input.tokenId));
     await tx.delete(refreshTokens).where(eq(refreshTokens.userId, input.userId));
   });
 }

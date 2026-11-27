@@ -1,8 +1,9 @@
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "#config/db.js";
-import { events, ticketTiers } from "#db/schema.js";
+import { events, organizerPayouts, ticketTiers, users } from "#db/schema.js";
 import logger from "#shared/utils/logger.js";
 import { AppError, ConflictError, NotFoundError } from "#shared/utils/errors.js";
+import { MINIMUM_NGN_CHARGE_KOBO } from "#features/payments/index.js";
 import { orderItems, orders, tickets } from "./orders.schema.js";
 
 // Inferred types
@@ -48,13 +49,14 @@ export async function createOrderWithReservation(input: {
   totalKobo?: number;
   paystackReference: string;
   reservationExpiresAt: Date;
+  split?: { basisPoints: number };
 }): Promise<Order> {
   return getDb().transaction(async (tx: DbTransaction) => {
     // ── Step 1: Verify event exists and is not soft-deleted ───────────────
     const [event] = await tx
-      .select({ id: events.id, title: events.title })
+      .select({ id: events.id, title: events.title, organizerId: events.organizerId })
       .from(events)
-      .where(and(eq(events.id, input.eventId), isNull(events.deletedAt)))
+      .where(and(eq(events.id, input.eventId), eq(events.isPublished, true), isNull(events.deletedAt)))
       .limit(1);
 
     if (!event) {
@@ -65,6 +67,13 @@ export async function createOrderWithReservation(input: {
       throw new NotFoundError(`Event does not exist or has been removed`);
     }
 
+    const [payout] = input.split ? await tx.select({ code: organizerPayouts.subaccountCode })
+      .from(organizerPayouts).innerJoin(users, eq(organizerPayouts.organizerId, users.id))
+      .where(and(eq(organizerPayouts.organizerId, event.organizerId),
+        isNull(users.deletedAt), isNull(users.organizerSuspendedAt), eq(users.isEmailVerified, true)))
+      .for("share") : [];
+    if (input.split && !payout) throw new ConflictError("Ticket sales are unavailable for this event.");
+
     // ── Step 2: Reserve inventory for every item and resolve prices ───────
     const orderItemsToInsert: Array<{
       ticketTierId: string;
@@ -73,7 +82,8 @@ export async function createOrderWithReservation(input: {
     }> = [];
     let calculatedTotalKobo = 0;
 
-    for (const item of input.items) {
+    const items = [...input.items].sort((a, b) => a.tierId.localeCompare(b.tierId));
+    for (const item of items) {
       // Peek at the tier inside the transaction to verify existence and read current price.
       const [existingTier] = await tx
         .select({
@@ -83,6 +93,7 @@ export async function createOrderWithReservation(input: {
           quantityAvailable: ticketTiers.quantityAvailable,
           quantityReserved: ticketTiers.quantityReserved,
           quantitySold: ticketTiers.quantitySold,
+          isActive: ticketTiers.isActive,
         })
         .from(ticketTiers)
         .where(eq(ticketTiers.id, item.tierId))
@@ -107,13 +118,7 @@ export async function createOrderWithReservation(input: {
         throw new AppError(422, `Ticket tier does not belong to event`);
       }
 
-      const unitPriceKobo = item.unitPriceKobo ?? existingTier.price;
-      orderItemsToInsert.push({
-        ticketTierId: item.tierId,
-        quantity: item.quantity,
-        unitPriceKobo,
-      });
-      calculatedTotalKobo += unitPriceKobo * item.quantity;
+      if (!existingTier.isActive) throw new ConflictError("This ticket tier is paused");
 
       // Atomic conditional UPDATE — Postgres evaluates the WHERE clause as one
       // indivisible operation, preventing two concurrent checkouts from both
@@ -128,15 +133,15 @@ export async function createOrderWithReservation(input: {
           and(
             eq(ticketTiers.id, item.tierId),
             eq(ticketTiers.eventId, input.eventId),
+            eq(ticketTiers.isActive, true),
+            input.split ? gte(ticketTiers.price, MINIMUM_NGN_CHARGE_KOBO) : undefined,
             // Invariant: new total must not exceed available capacity
             sql`quantity_sold + quantity_reserved + ${item.quantity} <= quantity_available`
           )
         )
-        .returning({ id: ticketTiers.id });
+        .returning({ price: ticketTiers.price });
 
       if (!reserved) {
-        // Tier exists and belongs to the event — so the only reason the
-        // UPDATE matched 0 rows is that stock is exhausted.
         const remaining =
           existingTier.quantityAvailable -
           existingTier.quantityReserved -
@@ -151,10 +156,13 @@ export async function createOrderWithReservation(input: {
         });
 
         throw new ConflictError(
-          `Not enough stock for tier ${item.tierId}. ` +
-            `Requested ${item.quantity}, but only ${remaining} ${remaining === 1 ? "spot" : "spots"} remaining`
+          "This ticket tier is unavailable for the selected quantity. Refresh the event and try again."
         );
       }
+
+      const unitPriceKobo = item.unitPriceKobo ?? reserved.price;
+      orderItemsToInsert.push({ ticketTierId: item.tierId, quantity: item.quantity, unitPriceKobo });
+      calculatedTotalKobo += unitPriceKobo * item.quantity;
 
       logger.debug("createOrderWithReservation: inventory reserved", {
         tierId: item.tierId,
@@ -164,6 +172,9 @@ export async function createOrderWithReservation(input: {
     }
 
     const orderTotalKobo = input.totalKobo ?? calculatedTotalKobo;
+    if (input.split && (orderTotalKobo < MINIMUM_NGN_CHARGE_KOBO || orderTotalKobo > 2_147_483_647)) {
+      throw new ConflictError("This selection cannot be purchased as a paid order.");
+    }
 
     // ── Step 3: Insert the order row ──────────────────────────────────────
     const [order] = await tx
@@ -172,6 +183,8 @@ export async function createOrderWithReservation(input: {
         buyerId: input.buyerId,
         eventId: input.eventId,
         totalKobo: orderTotalKobo,
+        platformFeeKobo: input.split ? Math.floor(orderTotalKobo * input.split.basisPoints / 10_000) : null,
+        paystackSubaccount: payout?.code ?? null,
         status: "pending",
         paystackReference: input.paystackReference,
         reservationExpiresAt: input.reservationExpiresAt,
@@ -286,157 +299,103 @@ export async function getOrderWithItems(
 }
 
 // ---------------------------------------------------------------------------
-// updateOrderStatus
-// ---------------------------------------------------------------------------
 
-/**
- * Updates only the `status` (and `updatedAt`) of an order.
- *
- * Does NOT touch inventory.  Call `fulfillOrder` or `releaseReservation`
- * when an inventory change is also required.
- */
-export async function updateOrderStatus(
-  orderId: string,
-  status: Order["status"]
-): Promise<void> {
-  await getDb()
-    .update(orders)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(orders.id, orderId));
-
-  logger.debug("updateOrderStatus", { orderId, status });
+async function lockOrder(tx: DbTransaction, orderId: string): Promise<Order | undefined> {
+  const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+  return order;
 }
 
-// ---------------------------------------------------------------------------
-// fulfillOrder
-// ---------------------------------------------------------------------------
+async function reservationItems(tx: DbTransaction, orderId: string): Promise<OrderItem[]> {
+  return tx.select().from(orderItems).where(eq(orderItems.orderId, orderId))
+    .orderBy(orderItems.ticketTierId);
+}
+
+async function moveReservedInventory(
+  tx: DbTransaction,
+  items: OrderItem[],
+  sold: boolean
+): Promise<void> {
+  for (const item of items) {
+    const [updated] = await tx
+      .update(ticketTiers)
+      .set({
+        quantityReserved: sql`quantity_reserved - ${item.quantity}`,
+        ...(sold ? { quantitySold: sql`quantity_sold + ${item.quantity}` } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(ticketTiers.id, item.ticketTierId), sql`quantity_reserved >= ${item.quantity}`))
+      .returning({ id: ticketTiers.id });
+
+    if (!updated) {
+      throw new Error(`Insufficient reserved inventory for order ${item.orderId}, tier ${item.ticketTierId}`);
+    }
+  }
+}
+
+async function setOrderStatus(tx: DbTransaction, orderId: string, status: Order["status"]): Promise<void> {
+  await tx.update(orders).set({ status, updatedAt: new Date() }).where(eq(orders.id, orderId));
+}
+
+async function recordPaymentException(tx: DbTransaction, order: Order): Promise<void> {
+  if (order.status === "pending") {
+    await moveReservedInventory(tx, await reservationItems(tx, order.id), false);
+  }
+  await setOrderStatus(tx, order.id, "payment_exception");
+  logger.warn("Payment requires reconciliation", { orderId: order.id, previousStatus: order.status });
+}
 
 /**
- * The fulfillment transaction — called after a successful Paystack payment
- * has been independently verified.
- *
- * Atomically:
- *   1. For each order item, converts `quantityReserved → quantitySold` on
- *      the corresponding `ticket_tiers` row with floor guard.
- *   2. Inserts all pre-generated ticket rows.
- *   3. Sets `orders.status = "paid"`.
+ * All settlement and reservation transitions lock the order before touching inventory.
+ * A retry after a committed payment returns no new tickets.
  */
 export async function fulfillOrder(
   orderId: string,
-  ticketsToInsert: TicketInsert[]
+  ticketsToInsert: TicketInsert[],
+  paidAt: Date
 ): Promise<Ticket[]> {
-  return getDb().transaction(async (tx: DbTransaction) => {
-    const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  return getDb().transaction(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (!order || order.status === "paid" || order.status === "payment_exception") return [];
 
-    if (items.length === 0) {
-      logger.error("fulfillOrder: no order items found", { orderId });
-      throw new Error(`fulfillOrder: order ${orderId} has no items — cannot fulfill`);
+    if (order.status !== "pending" || paidAt > order.reservationExpiresAt) {
+      await recordPaymentException(tx, order);
+      return [];
     }
 
-    // ── Step 1: reserved → sold with floor guard ─────────────────────────
-    for (const item of items) {
-      const [updated] = await tx
-        .update(ticketTiers)
-        .set({
-          quantityReserved: sql`quantity_reserved - ${item.quantity}`,
-          quantitySold: sql`quantity_sold + ${item.quantity}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(ticketTiers.id, item.ticketTierId),
-            sql`quantity_reserved >= ${item.quantity}`
-          )
-        )
-        .returning({ id: ticketTiers.id });
-
-      if (!updated) {
-        logger.error("fulfillOrder: reserved quantity insufficient to convert to sold", {
-          orderId,
-          tierId: item.ticketTierId,
-          quantity: item.quantity,
-        });
-        throw new Error(
-          `fulfillOrder: insufficient reserved quantity for tier ${item.ticketTierId}`
-        );
-      }
-
-      logger.debug("fulfillOrder: moved reserved→sold", {
-        orderId,
-        tierId: item.ticketTierId,
-        quantity: item.quantity,
-      });
+    const items = await reservationItems(tx, orderId);
+    if (!items.length) {
+      await recordPaymentException(tx, order);
+      return [];
     }
 
-    // ── Step 2: Insert tickets ────────────────────────────────────────────
+    await moveReservedInventory(tx, items, true);
     const createdTickets = await tx.insert(tickets).values(ticketsToInsert).returning();
-
-    // ── Step 3: Mark order paid ───────────────────────────────────────────
-    await tx
-      .update(orders)
-      .set({ status: "paid", updatedAt: new Date() })
-      .where(eq(orders.id, orderId));
-
-    logger.info("fulfillOrder: order fulfilled", {
-      orderId,
-      ticketCount: createdTickets.length,
-    });
-
+    await setOrderStatus(tx, orderId, "paid");
     return createdTickets;
   });
 }
 
-// ---------------------------------------------------------------------------
-// releaseReservation
-// ---------------------------------------------------------------------------
+export async function markPaymentException(orderId: string): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (!order || order.status === "paid" || order.status === "payment_exception") return;
+    await recordPaymentException(tx, order);
+  });
+}
 
-/**
- * Releases held inventory and sets the final failure status on an order.
- *
- * Called when:
- *  - The Paystack initialisation call fails → status "failed"
- *  - The cleanup job finds an expired pending order → status "expired"
- *
- * Atomically decrements `quantityReserved` on every affected tier row (with floor guard)
- * so those slots immediately return to the available pool, then updates the order status.
- */
+/** Returns true only when this call actually released a pending reservation. */
 export async function releaseReservation(
   orderId: string,
-  items: OrderItem[],
   status: "failed" | "expired"
-): Promise<void> {
-  await getDb().transaction(async (tx: DbTransaction) => {
-    for (const item of items) {
-      await tx
-        .update(ticketTiers)
-        .set({
-          quantityReserved: sql`quantity_reserved - ${item.quantity}`,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(ticketTiers.id, item.ticketTierId),
-            sql`quantity_reserved >= ${item.quantity}`
-          )
-        );
+): Promise<boolean> {
+  return getDb().transaction(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (!order || order.status !== "pending") return false;
+    if (status === "expired" && order.reservationExpiresAt >= new Date()) return false;
 
-      logger.debug("releaseReservation: decremented quantityReserved", {
-        orderId,
-        tierId: item.ticketTierId,
-        quantity: item.quantity,
-      });
-    }
-
-    await tx
-      .update(orders)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(orders.id, orderId));
-  });
-
-  logger.info("releaseReservation: reservation released", {
-    orderId,
-    itemCount: items.length,
-    newStatus: status,
+    await moveReservedInventory(tx, await reservationItems(tx, orderId), false);
+    await setOrderStatus(tx, orderId, status);
+    return true;
   });
 }
 

@@ -1,12 +1,17 @@
 import { ConflictError, EmailNotVerifiedError, NotFoundError } from "#shared/utils/errors.js";
 import { findUserById } from "#features/auth/index.js";
+import { paymentPolicy } from "#features/payments/index.js";
 import {
   createEventWithTiers,
   createTier,
   deleteTier,
   findActiveEventById,
+  findOwnedEvent,
   findOwnedTier,
+  getEventSales,
   listActiveEvents,
+  listEventTiers,
+  publishOwnedEvent,
   softDeleteEvent,
   updateEvent,
   updateTier,
@@ -28,7 +33,7 @@ export interface EventDetails {
 
 /** Public-facing response for event list endpoint with pagination. */
 export interface EventListResult {
-  items: PublicEvent[];
+  items: (PublicEvent & { isPublished: boolean })[];
   pagination: {
     page: number;
     limit: number;
@@ -37,10 +42,11 @@ export interface EventListResult {
   };
 }
 
-export async function listEvents(input: ListEventsQuery): Promise<EventListResult> {
+export async function listEvents(input: ListEventsQuery, organizerId?: string): Promise<EventListResult> {
   const result = await listActiveEvents({
     limit: input.limit,
     offset: (input.page - 1) * input.limit,
+    ...(organizerId === undefined ? {} : { organizerId }),
   });
 
   return {
@@ -61,6 +67,21 @@ export async function getEvent(eventId: string): Promise<EventDetails> {
   }
 
   return result;
+}
+
+export async function getOrganizerEvent(
+  eventId: string,
+  organizerId: string
+): Promise<{ event: Event; tiers: TicketTier[]; sales: Awaited<ReturnType<typeof getEventSales>> }> {
+  const event = await findOwnedEvent(eventId, organizerId);
+  if (!event) throw new NotFoundError("Event not found");
+  const [tiers, sales] = await Promise.all([listEventTiers(eventId), getEventSales(eventId)]);
+  return { event, tiers, sales };
+}
+
+export async function publishEvent(eventId: string, organizerId: string): Promise<Event> {
+  paymentPolicy();
+  return publishOwnedEvent(eventId, organizerId);
 }
 
 export async function createEvent(
@@ -162,9 +183,10 @@ export async function editTier(
   }
 
   try {
-    const updateInput: Partial<Pick<TicketTier, "name" | "price" | "quantityAvailable">> = {};
+    const updateInput: Partial<Pick<TicketTier, "name" | "price" | "quantityAvailable" | "isActive">> = {};
     if (input.name !== undefined) updateInput.name = input.name;
     if (input.price !== undefined) updateInput.price = input.price;
+    if (input.isActive !== undefined) updateInput.isActive = input.isActive;
     if (input.quantityAvailable !== undefined) {
       updateInput.quantityAvailable = input.quantityAvailable;
     }

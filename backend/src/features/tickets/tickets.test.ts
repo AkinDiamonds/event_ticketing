@@ -46,7 +46,7 @@ async function registerVerifiedUser(
 
   const [user] = await getDb()
     .update(users)
-    .set({ isEmailVerified: true, isOrganizer })
+    .set({ isEmailVerified: true, organizerApprovedAt: isOrganizer ? new Date() : null })
     .where(eq(users.email, normalizedEmail))
     .returning();
 

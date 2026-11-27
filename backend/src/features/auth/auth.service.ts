@@ -1,4 +1,4 @@
-import { ConflictError, ForbiddenError, UnauthorizedError } from "#shared/utils/errors.js";
+import { ConflictError, EmailNotVerifiedError, UnauthorizedError } from "#shared/utils/errors.js";
 import {
   createAccessToken,
   createOpaqueToken,
@@ -29,6 +29,7 @@ import {
   insertPasswordResetToken,
   insertRefreshToken,
   insertUser,
+  isApprovedOrganizer,
   resetUnverifiedUser,
   rotateRefreshToken,
   updateWhatsappNumber,
@@ -38,6 +39,7 @@ import type {
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
+  ResendVerificationEmailInput,
   ResetPasswordInput,
   SetWhatsAppInput,
   VerifyEmailInput,
@@ -67,7 +69,7 @@ function createSession(user: User) {
     userId: user.id,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
-    isOrganizer: user.isOrganizer,
+    isOrganizer: isApprovedOrganizer(user),
   });
 
   return {
@@ -86,9 +88,9 @@ async function sendEmail(message: Parameters<EmailSender["send"]>[0]): Promise<v
   }
 }
 
-async function createVerificationEmail(user: User): Promise<void> {
+async function createVerificationEmail(user: User, replaceExisting = true): Promise<void> {
   const rawToken = createOpaqueToken();
-  await deleteEmailVerificationTokens(user.id);
+  if (replaceExisting) await deleteEmailVerificationTokens(user.id);
   await insertEmailVerificationToken({
     userId: user.id,
     token: hashToken(rawToken),
@@ -145,7 +147,7 @@ export async function login(input: LoginInput) {
   }
 
   if (!user.isEmailVerified) {
-    throw new ForbiddenError("Please verify your email address before logging in");
+    throw new EmailNotVerifiedError("Please verify your email address before logging in");
   }
 
   const session = createSession(user);
@@ -192,6 +194,13 @@ export async function resendVerification(userId: string): Promise<void> {
   }
 
   await createVerificationEmail(user);
+}
+
+export async function resendVerificationEmail(input: ResendVerificationEmailInput): Promise<void> {
+  const user = await findUserByEmail(input.email);
+  if (user && !user.isEmailVerified) {
+    await createVerificationEmail(user, false);
+  }
 }
 
 export async function refresh(refreshToken: string) {
@@ -284,12 +293,18 @@ export async function setWhatsAppNumber(
   }
 }
 
+export async function getCurrentUser(userId: string): Promise<ReturnType<typeof publicUser>> {
+  const user = await findUserById(userId);
+  if (!user) throw new UnauthorizedError("Account is unavailable");
+  return publicUser(user);
+}
+
 function publicUser(user: User) {
   return {
     id: user.id,
     email: user.email,
     isEmailVerified: user.isEmailVerified,
-    isOrganizer: user.isOrganizer,
+    isOrganizer: isApprovedOrganizer(user),
     whatsappNumber: user.whatsappNumber,
   };
 }

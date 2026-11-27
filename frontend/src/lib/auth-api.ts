@@ -4,6 +4,7 @@ const AUTH_PATH = '/api/v1/auth'
 type ApiEnvelope = {
   success?: boolean
   message?: string
+  errors?: Array<{ code?: string }>
   data?: unknown
   accessToken?: string
   refreshToken?: string
@@ -13,6 +14,22 @@ type ApiEnvelope = {
 export type AuthTokens = {
   accessToken?: string
   refreshToken?: string
+}
+
+export class AuthRequestError extends Error {
+  readonly status: number
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
+export function requiresEmailVerification(error: unknown) {
+  return error instanceof AuthRequestError && error.status === 403 &&
+    (error.code === 'EMAIL_NOT_VERIFIED' || error.message === 'Please verify your email address before logging in')
 }
 
 let refreshInFlight: Promise<string | null> | null = null
@@ -90,6 +107,14 @@ export async function authenticatedFetch(input: RequestInfo | URL, init: Request
   return retried
 }
 
+export async function getCurrentAccount(): Promise<{ isOrganizer: boolean; isEmailVerified: boolean }> {
+  const response = await authenticatedFetch(`${API_BASE_URL}${AUTH_PATH}/me`)
+  const result = await response.json().catch(() => ({})) as ApiEnvelope
+  if (!response.ok) throw new AuthRequestError(result.message || 'Could not load your account', response.status)
+  const account = result.data as { isOrganizer?: boolean; isEmailVerified?: boolean } | undefined
+  return { isOrganizer: account?.isOrganizer === true, isEmailVerified: account?.isEmailVerified === true }
+}
+
 async function request(path: string, payload?: Record<string, string>, token?: string, canRefresh = true) {
   const bearer = token
   const response = await fetch(`${API_BASE_URL}${AUTH_PATH}${path}`, {
@@ -107,7 +132,8 @@ async function request(path: string, payload?: Record<string, string>, token?: s
   }
   if (!response.ok) {
     if (response.status === 401 && token && !canRefresh) clearSessionTokens()
-    throw new Error(result.message || `Request failed (${response.status})`)
+    const code = Array.isArray(result.errors) ? result.errors.find((detail) => detail?.code)?.code : undefined
+    throw new AuthRequestError(result.message || `Request failed (${response.status})`, response.status, code)
   }
   return result
 }
@@ -153,10 +179,8 @@ export async function resetPassword(token: string, password: string) {
   return request('/reset-password', { token, password })
 }
 
-export async function resendVerification() {
-  const token = localStorage.getItem('lasu_access_token')
-  if (!token) throw new Error('Sign in first to resend your verification email.')
-  return request('/resend-verification', undefined, token)
+export async function resendVerificationEmail(email: string) {
+  return request('/resend-verification-email', { email })
 }
 
 export async function logout() {

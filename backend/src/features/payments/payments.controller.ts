@@ -1,8 +1,12 @@
 import type { Request, Response } from "express";
+import { z } from "zod";
 import logger from "#shared/utils/logger.js";
 import * as paymentsService from "./payments.service.js";
 
-export function handleWebhook(req: Request, res: Response): void {
+const envelopeSchema = z.object({ event: z.string(), data: z.unknown() });
+const chargeSchema = z.object({ reference: z.string().min(1).max(100) });
+
+export async function handleWebhook(req: Request, res: Response): Promise<void> {
   const signature = req.headers["x-paystack-signature"];
 
   if (typeof signature !== "string" || !signature) {
@@ -22,23 +26,41 @@ export function handleWebhook(req: Request, res: Response): void {
     return;
   }
 
-  // Respond 200 before processing — Paystack retries if we don't reply fast enough.
-  res.status(200).json({ received: true });
-
-  let event: { event: string; data: { reference: string } };
+  let payload: unknown;
   try {
-    event = JSON.parse(rawBody.toString("utf8")) as typeof event;
+    payload = JSON.parse(rawBody.toString("utf8"));
   } catch {
-    logger.error("handleWebhook: failed to parse webhook body after signature verified");
+    res.status(400).json({ message: "Invalid webhook payload" });
     return;
   }
 
-  if (event.event === "charge.success") {
-    paymentsService.handleChargeSuccess(event.data.reference).catch((err: unknown) => {
-      logger.error("handleWebhook: unhandled error in handleChargeSuccess", {
-        reference: event.data.reference,
-        err,
+  const event = envelopeSchema.safeParse(payload);
+  if (!event.success) {
+    res.status(400).json({ message: "Invalid webhook payload" });
+    return;
+  }
+  if (event.data.event !== "charge.success") {
+    res.status(200).json({ received: true });
+    return;
+  }
+
+  const charge = chargeSchema.safeParse(event.data.data);
+  if (!charge.success) {
+    res.status(400).json({ message: "Missing payment reference" });
+    return;
+  }
+
+  const { reference } = charge.data;
+  try {
+    const fulfillment = await paymentsService.handleChargeSuccess(reference);
+    res.status(200).json({ received: true });
+    if (fulfillment) {
+      void paymentsService.notifyBuyer(fulfillment).catch((err: unknown) => {
+        logger.error("Failed to notify buyer after fulfillment", { reference, err });
       });
-    });
+    }
+  } catch (err) {
+    logger.error("Could not complete payment webhook", { reference, err });
+    res.status(503).json({ message: "Payment processing temporarily unavailable" });
   }
 }

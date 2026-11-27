@@ -8,6 +8,8 @@ export const users = pgTable("users", {
   whatsappNumber: varchar("whatsapp_number", { length: 20}).unique(),
   whatsappSetAt: timestamp("whatsapp_number_set_at", { withTimezone: true}).defaultNow(),
   isOrganizer: boolean("is_organizer").notNull().default(false),
+  organizerApprovedAt: timestamp("organizer_approved_at", { withTimezone: true }),
+  organizerSuspendedAt: timestamp("organizer_suspended_at", { withTimezone: true }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -11,6 +11,7 @@ import {
   buildVerificationEmail,
   buildPasswordResetEmail,
 } from "./email.templates.js";
+import { env } from "#config/env.js";
 
 
 
@@ -27,11 +28,16 @@ beforeEach(() => {
 // ── sendTicketEmail ──────────────────────────────────────────────────────────
 
 describe("sendTicketEmail", () => {
+  const eventId = "ee90aabb-7b77-4233-a86d-84478b9c4211";
+  const orderId = "80902fa3-e831-4b68-b282-b9f652bb6fbb";
+
   it("sends a formatted email containing the event title and all ticket codes", async () => {
     await sendTicketEmail({
       to: "buyer@example.com",
       eventTitle: "Summer Fest 2026",
       ticketCodes: ["ABC123", "XYZ789"],
+      eventId,
+      orderId,
     });
 
     expect(memoryEmail.messages).toHaveLength(1);
@@ -40,6 +46,10 @@ describe("sendTicketEmail", () => {
     expect(msg.subject).toContain("Summer Fest 2026");
     expect(msg.text).toContain("ABC123");
     expect(msg.text).toContain("XYZ789");
+    const orderUrl = `${env.FRONTEND_URL}/tickets/${eventId}/ticket?orderId=${orderId}`;
+    expect(msg.text).toContain(orderUrl);
+    expect(msg.html).toContain(`href="${orderUrl}"`);
+    expect(msg.html).toContain(">View Order</a>");
   });
 
   it("works for a single ticket code", async () => {
@@ -47,6 +57,8 @@ describe("sendTicketEmail", () => {
       to: "buyer@example.com",
       eventTitle: "Single Ticket Event",
       ticketCodes: ["ONL001"],
+      eventId,
+      orderId,
     });
 
     expect(memoryEmail.messages).toHaveLength(1);
@@ -54,13 +66,15 @@ describe("sendTicketEmail", () => {
   });
 
   it("catches a delivery error silently and does not throw", async () => {
-    setEmailSender({ send: async () => { throw new Error("SMTP server down"); } });
+    setEmailSender({ send: () => Promise.reject(new Error("SMTP server down")) });
 
     await expect(
       sendTicketEmail({
         to: "buyer@example.com",
         eventTitle: "Summer Fest 2026",
         ticketCodes: ["ABC123"],
+        eventId,
+        orderId,
       })
     ).resolves.toBeUndefined();
   });
@@ -95,7 +109,7 @@ describe("sendTicketWhatsApp", () => {
 
   it("catches a delivery error silently and does not throw", async () => {
     setWhatsAppSender({
-      send: async () => { throw new Error("Meta API unreachable"); },
+      send: () => Promise.reject(new Error("Meta API unreachable")),
     });
 
     // Use null phone so WHATSAPP_ENABLED guard is bypassed by the phone guard,
@@ -123,7 +137,9 @@ describe("buildVerificationEmail", () => {
     const email = buildVerificationEmail("user@example.com", url);
 
     expect(email.to).toBe("user@example.com");
-    expect(email.subject).toBe("Verify your email - Party Tickets");
+    expect(email.subject).toBe("Verify your email - Event Tickets");
+    expect(email.text).toContain("Welcome to Event Tickets");
+    expect(email.html).toContain("<h1>Event Tickets</h1>");
     expect(email.text).toContain(url);
     expect(email.html).toContain(`href="${url}"`);
     expect(email.html).toContain('target="_blank"');
@@ -154,7 +170,9 @@ describe("buildPasswordResetEmail", () => {
     const email = buildPasswordResetEmail("user@example.com", url);
 
     expect(email.to).toBe("user@example.com");
-    expect(email.subject).toBe("Reset your password - Party Tickets");
+    expect(email.subject).toBe("Reset your password - Event Tickets");
+    expect(email.text).toContain("your Event Tickets account");
+    expect(email.html).toContain("<h1>Event Tickets</h1>");
     expect(email.text).toContain(url);
     expect(email.html).toContain(`href="${url}"`);
     expect(email.html).toContain('target="_blank"');

@@ -44,6 +44,20 @@ router.get(
   eventsController.listEvents
 );
 router.get(
+  "/organizer",
+  authenticate,
+  requireOrganizer,
+  validate({ query: listEventsQuerySchema }),
+  eventsController.listOrganizerEvents
+);
+router.get(
+  "/organizer/:eventId",
+  authenticate,
+  requireOrganizer,
+  validate({ params: eventIdParamsSchema }),
+  eventsController.getOrganizerEvent
+);
+router.get(
   "/:eventId",
   publicEventsRateLimiter,
   validate({ params: eventIdParamsSchema }),
@@ -55,6 +69,13 @@ router.post(
   authenticate,
   validate({ body: createEventSchema }),
   eventsController.createEvent
+);
+router.post(
+  "/:eventId/publish",
+  authenticate,
+  requireOrganizer,
+  validate({ params: eventIdParamsSchema }),
+  eventsController.publishEvent
 );
 router.patch(
   "/:eventId",

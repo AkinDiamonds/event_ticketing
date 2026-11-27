@@ -29,7 +29,7 @@ export const checkoutSchema = z.object({
         }
       },
       { message: "callbackUrl must match an allowed origin" }
-    ),
+    ).optional(),
 });
 
 export const orderIdParamSchema = z.object({

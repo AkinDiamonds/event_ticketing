@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getEvent, getOrder } from '../../../lib/events-api'
+import { ApiError, getEvent, getOrder } from '../../../lib/events-api'
 import { formatEventSchedule } from '../../../lib/format-event'
 import { MyTicketScreen, type TicketDetails } from '../../../screens/my-ticket-screen'
 
@@ -19,7 +19,7 @@ function firstValue(value: unknown, keys: string[]): string {
 
 export default function TicketWalletPage({ params }: { params: Record<string, string> }) {
   const orderId = new URLSearchParams(window.location.search).get('orderId') || ''
-  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>(orderId ? 'loading' : 'missing')
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error' | 'sign-in'>(orderId ? 'loading' : 'missing')
   const [ticket, setTicket] = useState<TicketDetails>()
   const eventId = params.id
 
@@ -51,8 +51,8 @@ export default function TicketWalletPage({ params }: { params: Record<string, st
           reference: orderId,
         })
         setStatus('ready')
-      } catch {
-        if (active) setStatus('error')
+      } catch (cause) {
+        if (active) setStatus(cause instanceof ApiError && cause.status === 401 ? 'sign-in' : 'error')
       }
     }
 
@@ -60,5 +60,9 @@ export default function TicketWalletPage({ params }: { params: Record<string, st
     return () => { active = false }
   }, [orderId, eventId])
 
-  return <MyTicketScreen backHref={'/tickets/' + encodeURIComponent(eventId) + '/success?orderId=' + encodeURIComponent(orderId)} ordersHref="/orders" status={status} ticket={ticket} />
+  const eventHref = '/tickets/' + encodeURIComponent(eventId)
+  const orderQuery = '?orderId=' + encodeURIComponent(orderId)
+  const signInHref = '/login?returnTo=' + encodeURIComponent(eventHref + '/ticket' + orderQuery)
+
+  return <MyTicketScreen backHref={eventHref + '/success' + orderQuery} ordersHref="/orders" signInHref={signInHref} status={status} ticket={ticket} />
 }

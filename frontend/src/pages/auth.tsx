@@ -1,7 +1,7 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useRouter } from '../router'
 import { CheckIcon, EyeIcon, EyeOffIcon, LogoMark, MailIcon } from '../components/icons'
-import { login, register, requestPasswordReset, resendVerification, resetPassword, verifyEmail } from '../lib/auth-api'
+import { AuthRequestError, login, register, requestPasswordReset, requiresEmailVerification, resendVerificationEmail, resetPassword, verifyEmail } from '../lib/auth-api'
 
 type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset' | 'reset-success'
 
@@ -55,8 +55,6 @@ function AuthInput({
           placeholder={placeholder}
           autoComplete={autoComplete}
           maxLength={maxLength}
-          autoCapitalize={autoComplete === 'one-time-code' ? 'none' : undefined}
-          spellCheck={autoComplete === 'one-time-code' ? false : undefined}
           className={`h-12 w-full rounded-[10px] border border-[#dfe6e1] bg-white px-4 text-base text-[#17231b] md:text-sm outline-none transition placeholder:text-[#a1aaa4] focus:border-[#08743d] focus:ring-4 focus:ring-[#08743d]/10 ${isPassword ? 'pr-12' : ''}`}
         />
         {isPassword ? (
@@ -113,31 +111,54 @@ export default function AuthPage() {
   const mode = authMode(pathname)
   const params = new URLSearchParams(window.location.search)
   const requestedDestination = params.get('returnTo') || ''
-  const returnTo = /^\/tickets\/[^/?#]+\/payment$/.test(requestedDestination) ? requestedDestination : ''
+  const canReturnToCheckout = /^\/tickets\/[^/?#]+\/payment$/.test(requestedDestination)
+  const canReturnToOrder = /^\/tickets\/[a-f0-9-]{36}\/ticket\?orderId=[a-f0-9-]{36}$/i.test(requestedDestination)
+  const canReturnToWorkspace = requestedDestination === '/events/create' || /^\/admin\/(?:events|tickets(?:\?eventId=[a-f0-9-]{36}(?:&created=1)?)?)$/.test(requestedDestination)
+  const returnTo = canReturnToCheckout || canReturnToOrder || canReturnToWorkspace ? requestedDestination : ''
   const authHref = (path: string) => returnTo ? path + (path.includes('?') ? '&' : '?') + 'returnTo=' + encodeURIComponent(returnTo) : path
-  const [email, setEmail] = useState(sessionStorage.getItem('lasu_signup_email') || '')
-  const [verificationCode, setVerificationCode] = useState(() => mode === 'verify' ? params.get('token') ?? '' : '')
-  const [resetCode, setResetCode] = useState(() => mode === 'reset' ? params.get('token') ?? '' : '')
+  const [pendingVerificationEmail] = useState(() => sessionStorage.getItem('lasu_signup_email') || '')
+  const [email, setEmail] = useState(pendingVerificationEmail)
+  const token = params.get('token')?.trim() || ''
+  const verificationToken = mode === 'verify' ? token : ''
+  const verificationRequest = useRef<Promise<unknown> | null>(null)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [resending, setResending] = useState(false)
-  const [verified, setVerified] = useState(false)
-  const canResendVerification = Boolean(email
-    && sessionStorage.getItem('lasu_signup_can_resend') === 'true'
-    && localStorage.getItem('lasu_access_token')
-    && localStorage.getItem('lasu_profile_email') === email)
+  const [verification, setVerification] = useState<'waiting' | 'confirmed' | 'invalid' | 'failed'>('waiting')
+  const [invalidResetLink, setInvalidResetLink] = useState(false)
+  const resetRequested = mode === 'reset' && !token && params.get('sent') === '1'
+  const canReset = Boolean(token) && !invalidResetLink
+  const verifying = Boolean(verificationToken) && verification === 'waiting'
+
+  useEffect(() => {
+    if (!verificationToken) return
+
+    let active = true
+    // Reuse the request when React re-runs this effect so the one-time link is only submitted once.
+    verificationRequest.current ??= verifyEmail(verificationToken)
+    void verificationRequest.current.then(() => {
+      if (!active) return
+      sessionStorage.removeItem('lasu_signup_email')
+      setVerification('confirmed')
+    }, (cause: unknown) => {
+      if (!active) return
+      setVerification(cause instanceof AuthRequestError && cause.status === 401 ? 'invalid' : 'failed')
+    })
+
+    return () => { active = false }
+  }, [verificationToken])
 
   async function handleResendVerification() {
+    if (resending || !pendingVerificationEmail) return
     setError('')
     setNotice('')
     setResending(true)
     try {
-      await resendVerification()
-      setVerificationCode('')
-      setNotice('A new verification email has been sent. Use the code from the latest email.')
+      await resendVerificationEmail(pendingVerificationEmail)
+      setNotice('Check your inbox for a new verification link. If you already verified your email, you can log in.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not resend the verification email.')
     } finally {
@@ -156,10 +177,7 @@ export default function AuthPage() {
       setError('Use at least 8 characters, one uppercase letter, and one number.')
       return
     }
-    if (mode === 'reset' && !resetCode.trim()) {
-      setError('Enter your reset code.')
-      return
-    }
+    if (mode === 'reset' && !canReset) return
     if (mode === 'reset' && (password.length < 8 || password.length > 72)) {
       setError('Use between 8 and 72 characters.')
       return
@@ -168,43 +186,42 @@ export default function AuthPage() {
       setError('Your passwords do not match.')
       return
     }
-    const token = verificationCode.replace(/\s+/g, '')
-    if (mode === 'verify' && !token) {
-      setError('Enter the verification code from your email.')
-      return
-    }
+    const submittedEmail = email.trim().toLowerCase()
     setBusy(true)
     try {
       if (mode === 'login') {
-        await login(email, password)
+        await login(submittedEmail, password)
+        sessionStorage.removeItem('lasu_signup_email')
         navigate(returnTo || '/profile')
       } else if (mode === 'register') {
-        const submittedEmail = email.trim().toLowerCase()
-        const { accessToken } = await register(submittedEmail, password)
+        await register(submittedEmail, password)
         sessionStorage.setItem('lasu_signup_email', submittedEmail)
-        sessionStorage.setItem('lasu_signup_can_resend', String(Boolean(accessToken)))
         navigate(authHref('/verify-email'))
-      } else if (mode === 'verify') {
-        await verifyEmail(token)
-        setVerificationCode('')
-        sessionStorage.removeItem('lasu_signup_can_resend')
-        setVerified(true)
       } else if (mode === 'forgot') {
         await requestPasswordReset(email)
         navigate(authHref('/reset-password?sent=1'))
       } else if (mode === 'reset') {
-        await resetPassword(resetCode.trim(), password)
+        await resetPassword(token, password)
         navigate(authHref('/password-reset-success'))
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.')
+      if (mode === 'login' && requiresEmailVerification(cause)) {
+        sessionStorage.setItem('lasu_signup_email', submittedEmail)
+        navigate(authHref('/verify-email'))
+      } else if (mode === 'reset' && cause instanceof AuthRequestError && cause.status === 401) {
+        setInvalidResetLink(true)
+        setPassword('')
+        setConfirmPassword('')
+      } else {
+        setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.')
+      }
     } finally {
       setBusy(false)
     }
   }
 
-  const title = mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Reset your password' : mode === 'reset' ? 'Set new password' : ''
-  const subtitle = mode === 'login' ? 'Sign in to manage your events and tickets.' : mode === 'register' ? 'Use your email to create an account.' : mode === 'forgot' ? 'Enter your email to request a password reset.' : mode === 'reset' ? 'Enter your reset code and choose a new password.' : ''
+  const title = mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Reset your password' : resetRequested ? 'Check your inbox' : canReset ? 'Set new password' : 'Reset link unavailable'
+  const subtitle = mode === 'login' ? 'Sign in to manage your events and tickets.' : mode === 'register' ? 'Use your email to create an account.' : mode === 'forgot' ? 'Enter your email to request a password reset.' : resetRequested ? 'If an account exists for that email, use the Reset Password link in your inbox.' : canReset ? 'Choose and confirm your new password.' : 'This link is missing, expired, or already used. Request a new one to reset your password.'
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[radial-gradient(circle_at_88%_5%,rgba(13,153,75,.08),transparent_24%),#fff] px-6 pb-8 pt-7 sm:px-10 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(420px,500px)] lg:items-center lg:gap-[8vw] lg:px-[8vw] lg:py-8 xl:px-[10vw]">
@@ -223,29 +240,33 @@ export default function AuthPage() {
       {mode === 'verify' ? (
         <section className="relative z-10 m-auto w-full max-w-[390px] py-12 text-center lg:m-0 lg:max-w-none lg:rounded-[30px] lg:border lg:border-[#e8eee9] lg:bg-white lg:px-10 lg:py-12 lg:shadow-[0_28px_80px_rgba(21,63,37,.08)]">
           <div className="mx-auto grid h-24 w-24 place-items-center rounded-[28px] bg-[#eaf7ef] text-[#08743d]"><MailIcon className="size-10" /></div>
-          <h1 className="mt-8 text-[28px] font-bold tracking-[-0.04em] text-[#111c16]">{verified ? 'Email verified' : 'Verify your email'}</h1>
-          {verified ? (
+          <h1 className="mt-8 text-[28px] font-bold tracking-[-0.04em] text-[#111c16]">{verification === 'confirmed' ? 'Email verified' : verifying ? 'Verifying your email' : verificationToken ? 'Verify your email' : 'Check your inbox'}</h1>
+          {verification === 'confirmed' ? (
             <>
               <p role="status" className="mx-auto mt-3 max-w-[300px] text-sm leading-6 text-muted">Your account is ready. Log in to get started.</p>
               <a href={authHref('/login')} className="mt-7 inline-flex h-12 w-full items-center justify-center rounded-[10px] bg-forest text-sm font-bold text-white hover:bg-forest-dark">Go to log in</a>
             </>
+          ) : verifying ? (
+            <p role="status" className="mt-3 text-sm text-muted">Please wait while we verify your email.</p>
           ) : (
             <>
-              <p className="mx-auto mt-3 max-w-[320px] text-sm leading-6 break-words text-muted">
-                {email ? <>Copy the verification code sent to <strong className="font-semibold text-ink">{email}</strong> and paste it below.</> : 'Copy the verification code from your email and paste it below.'}
-              </p>
-              <form onSubmit={submit} className="mt-6 space-y-4 text-left">
-                <AuthInput label="Verification code" value={verificationCode} onChange={setVerificationCode} placeholder="Paste your verification code" autoComplete="one-time-code" />
-                {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-                {notice ? <p role="status" className="rounded-xl bg-mint px-4 py-3 text-sm text-forest">{notice}</p> : null}
-                <SolidButton disabled={busy || resending}>{busy ? 'Verifying…' : 'Verify email'}</SolidButton>
-              </form>
-              <p className="mt-5 text-xs leading-5 text-muted">Can’t find the email? Check your spam folder.</p>
-              {canResendVerification ? (
-                <button type="button" disabled={resending || busy} onClick={handleResendVerification} className="mt-2 text-sm font-semibold text-forest hover:underline disabled:opacity-50">{resending ? 'Sending…' : 'Resend verification email'}</button>
+              {!verificationToken ? (
+                <p className="mx-auto mt-3 max-w-[320px] break-words text-sm leading-6 text-muted">
+                  {pendingVerificationEmail ? <>Open the email sent to <strong className="text-ink">{pendingVerificationEmail}</strong> and click Verify Email. Check your spam folder if you can’t find it.</> : 'Open the verification email and click Verify Email. To request a new link, log in with the account you want to verify.'}
+                </p>
               ) : (
-                <a href={authHref('/register')} className="mt-2 inline-block text-sm font-semibold text-forest hover:underline">Return to sign-up to request a new code</a>
+                <p role="alert" className="mt-3 text-sm text-red-700">
+                  {verification === 'invalid' ? 'This verification link has expired or already been used.' : 'We couldn’t verify your email. Reopen the email link to try again.'}
+                </p>
               )}
+              {pendingVerificationEmail ? (
+                <div className="mt-6 space-y-4">
+                  {verificationToken ? <p className="break-words text-sm text-muted">Send a new link to <strong className="text-ink">{pendingVerificationEmail}</strong>.</p> : null}
+                  {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+                  {notice ? <p role="status" className="rounded-xl bg-mint px-4 py-3 text-sm text-forest">{notice}</p> : null}
+                  <button type="button" disabled={resending} onClick={handleResendVerification} className="flex h-12 w-full items-center justify-center rounded-[10px] bg-forest px-4 text-sm font-bold text-white hover:bg-forest-dark disabled:opacity-60">{resending ? 'Sending…' : 'Resend verification email'}</button>
+                </div>
+              ) : verificationToken ? <p className="mt-4 text-sm text-muted">Log in to continue or to request a new link.</p> : null}
               <a href={authHref('/login')} className="mt-5 block text-sm font-semibold text-muted hover:underline">Back to log in</a>
             </>
           )}
@@ -262,32 +283,28 @@ export default function AuthPage() {
           <h1 className="text-[30px] font-bold tracking-[-0.045em] text-[#111c16]">{title}</h1>
           <p className="mt-2 text-[14px] leading-6 text-[#69746d]">{subtitle}</p>
 
-          {mode === 'reset' && params.get('sent') === '1' ? (
-            <p role="status" className="mt-5 rounded-xl bg-mint px-4 py-3 text-sm leading-5 text-forest">If an account exists for that email, check your inbox for password reset instructions.</p>
+          {mode !== 'reset' || canReset ? (
+            <form onSubmit={submit} className="mt-8 space-y-5">
+              {mode !== 'reset' ? <AuthInput label="Email address" value={email} onChange={setEmail} placeholder="you@example.com" type="email" autoComplete="email" /> : null}
+              {mode !== 'forgot' ? <AuthInput label={mode === 'reset' ? 'New password' : 'Password'} value={password} onChange={setPassword} maxLength={mode === 'reset' ? 72 : undefined} placeholder={mode === 'reset' ? 'Create a password' : 'Enter your password'} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /> : null}
+              {mode === 'reset' ? <AuthInput label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} maxLength={72} placeholder="Confirm your password" type="password" autoComplete="new-password" /> : null}
+
+              {mode === 'login' ? (
+                <div className="-mt-1 flex justify-end text-xs font-semibold text-forest">
+                  <a href={authHref('/forgot-password')} className="hover:underline">Forgot password?</a>
+                </div>
+              ) : null}
+              {mode === 'reset' ? <p className="-mt-2 text-xs text-muted">Use 8 to 72 characters.</p> : null}
+              {mode === 'register' ? <div className="-mt-2 space-y-1.5"><FieldCheck valid={passwordRules[0]}>At least 8 characters</FieldCheck><FieldCheck valid={passwordRules[1]}>One uppercase letter</FieldCheck><FieldCheck valid={passwordRules[2]}>One number</FieldCheck></div> : null}
+              {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-[12px] leading-5 text-red-700">{error}</p> : null}
+
+              <SolidButton disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Send reset instructions' : 'Reset password'}</SolidButton>
+            </form>
           ) : null}
-          <form onSubmit={submit} className="mt-8 space-y-5">
-            {mode !== 'reset' ? <AuthInput label="Email address" value={email} onChange={setEmail} placeholder="you@example.com" type="email" autoComplete="email" /> : null}
-            {mode === 'reset' ? <AuthInput label="Reset code" value={resetCode} onChange={setResetCode} placeholder="Enter reset code" autoComplete="one-time-code" /> : null}
-            {mode !== 'forgot' ? <AuthInput label={mode === 'reset' ? 'New password' : 'Password'} value={password} onChange={setPassword} maxLength={mode === 'reset' ? 72 : undefined} placeholder={mode === 'reset' ? 'Create a password' : 'Enter your password'} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /> : null}
-            {mode === 'reset' ? <AuthInput label="Confirm password" value={confirmPassword} onChange={setConfirmPassword} maxLength={72} placeholder="Confirm your password" type="password" autoComplete="new-password" /> : null}
 
-            {mode === 'login' ? (
-              <div className="-mt-1 flex flex-wrap justify-between gap-2 text-xs font-semibold text-forest">
-                <a href={authHref('/verify-email')} className="hover:underline">Verify your email</a>
-                <a href={authHref('/forgot-password')} className="hover:underline">Forgot password?</a>
-              </div>
-            ) : null}
-            {mode === 'reset' ? <p className="-mt-2 text-xs text-muted">Use 8 to 72 characters.</p> : null}
-            {mode === 'register' ? <div className="-mt-2 space-y-1.5"><FieldCheck valid={passwordRules[0]}>At least 8 characters</FieldCheck><FieldCheck valid={passwordRules[1]}>One uppercase letter</FieldCheck><FieldCheck valid={passwordRules[2]}>One number</FieldCheck></div> : null}
-            {error ? <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-[12px] leading-5 text-red-700">{error}</p> : null}
-            {notice ? <p role="status" className="rounded-xl bg-[#eff8f2] px-4 py-3 text-[12px] leading-5 text-[#12673a]">{notice}</p> : null}
-
-            <SolidButton disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : mode === 'register' ? 'Create account' : mode === 'forgot' ? 'Send reset instructions' : 'Reset password'}</SolidButton>
-          </form>
-
-          {mode === 'forgot' || mode === 'reset' ? (
+          {mode === 'reset' ? (
             <p className="mt-5 text-center text-sm">
-              <a className="font-semibold text-forest hover:underline" href={authHref(mode === 'forgot' ? '/reset-password' : '/forgot-password')}>{mode === 'forgot' ? 'I already have a reset code' : 'Request a new reset code'}</a>
+              <a className="font-semibold text-forest hover:underline" href={authHref('/forgot-password')}>Request a new reset link</a>
             </p>
           ) : null}
           <p className="mt-7 text-center text-[12px] text-[#737e76]">

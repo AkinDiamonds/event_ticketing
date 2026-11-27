@@ -132,6 +132,15 @@ describe("login and email verification", () => {
     const unverifiedLogin = await request(app).post("/api/v1/auth/login").send(input);
     expect(unverifiedLogin.status).toBe(403);
     expect(authBody(unverifiedLogin).message).toContain("verify your email");
+    expect(unverifiedLogin.body).toMatchObject({
+      errors: [{ code: "EMAIL_NOT_VERIFIED" }],
+    });
+
+    const incorrectPassword = await request(app)
+      .post("/api/v1/auth/login")
+      .send({ ...input, password: "incorrect password" });
+    expect(incorrectPassword.status).toBe(401);
+    expect(incorrectPassword.body).not.toHaveProperty("errors");
 
     // Verify email using token from email
     const token = emailSender.messages[0]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
@@ -158,7 +167,13 @@ describe("login and email verification", () => {
       email: "student@example.com",
       password: "correct horse battery staple",
     });
-    const token = emailSender.messages[0]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
+    const message = emailSender.messages[0];
+    const verificationLink = message?.text.match(/https?:\/\/\S+\/verify-email\?token=[a-f0-9]+/i)?.[0];
+    expect(verificationLink).toBeDefined();
+    expect(message?.html).toContain(`href="${verificationLink}"`);
+    expect(message?.html).toContain(">Verify Email</a>");
+    expect(message?.html).not.toContain(`>${verificationLink}</a>`);
+    const token = new URL(verificationLink!).searchParams.get("token");
 
     const response = await request(app).post("/api/v1/auth/verify-email").send({ token });
 
@@ -170,6 +185,34 @@ describe("login and email verification", () => {
     const response = await request(app).post("/api/v1/auth/resend-verification").send();
 
     expect(response.status).toBe(401);
+  });
+
+  it("resends verification before login and accepts requests for unknown accounts", async () => {
+    const input = { email: "student@example.com", password: "correct horse battery staple" };
+    await request(app).post("/api/v1/auth/register").send(input);
+    const originalToken = emailSender.messages[0]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
+
+    const resent = await request(app)
+      .post("/api/v1/auth/resend-verification-email")
+      .send({ email: input.email });
+    const unknown = await request(app)
+      .post("/api/v1/auth/resend-verification-email")
+      .send({ email: "unknown@example.com" });
+    expect(resent.status).toBe(200);
+    expect(unknown.body).toEqual(resent.body);
+    expect(emailSender.messages).toHaveLength(2);
+
+    const newToken = emailSender.messages[1]?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
+    expect(newToken).toBeDefined();
+    expect(newToken).not.toBe(originalToken);
+    const originalLink = await request(app)
+      .post("/api/v1/auth/verify-email")
+      .send({ token: originalToken });
+    expect(originalLink.status).toBe(200);
+    const secondLink = await request(app)
+      .post("/api/v1/auth/verify-email")
+      .send({ token: newToken });
+    expect(secondLink.status).toBe(401);
   });
 
   it("keeps registration successful when email delivery fails", async () => {
@@ -294,6 +337,8 @@ describe("password reset", () => {
     await request(app).post("/api/v1/auth/forgot-password").send({ email: input.email });
     const message = emailSender.messages.at(-1);
     const token = message?.text.match(/[?&]token=([a-f0-9]+)/i)?.[1];
+    expect(message?.html).toContain(`/reset-password?token=${token}"`);
+    expect(message?.html).toContain(">Reset Password</a>");
 
     const reset = await request(app).post("/api/v1/auth/reset-password").send({
       token,
@@ -305,6 +350,10 @@ describe("password reset", () => {
 
     expect(reset.status).toBe(200);
     expect(oldTokenRefresh.status).toBe(401);
+    const reused = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({ token, password: "another secure password" });
+    expect(reused.status).toBe(401);
   });
 });
 

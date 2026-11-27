@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "organizer_approved_at" timestamp with time zone;

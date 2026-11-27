@@ -4,9 +4,11 @@ import { eq } from "drizzle-orm";
 import { createAccessToken } from "#shared/utils/tokens.js";
 import { createApp } from "../../app.js";
 import { closeDb, getDb } from "#config/db.js";
+import { cleanupExpiredReservations } from "./orders.service.js";
 import { users } from "#features/auth/auth.schema.js";
 import { events, ticketTiers } from "#features/events/events.schema.js";
 import { orders, orderItems, tickets } from "./orders.schema.js";
+import { organizerPayouts } from "#db/schema.js";
 
 const app = createApp();
 
@@ -60,7 +62,7 @@ async function registerVerifiedUser(
 
   const [user] = await getDb()
     .update(users)
-    .set({ isEmailVerified: true, isOrganizer })
+    .set({ isEmailVerified: true, organizerApprovedAt: isOrganizer ? new Date() : null })
     .where(eq(users.email, normalizedEmail))
     .returning();
 
@@ -99,6 +101,11 @@ async function createEventFixture(
   if (!eventId || !tierId) {
     throw new Error("Failed to create event fixture");
   }
+  const [event] = await getDb().update(events).set({ isPublished: true }).where(eq(events.id, eventId)).returning();
+  await getDb().insert(organizerPayouts).values({
+    organizerId: event!.organizerId, subaccountCode: "ACCT_fixture", subaccountId: "1001",
+    accountName: "Test Organizer", bankCode: "058", accountLast4: "6047",
+  });
   return { eventId, tierId };
 }
 
@@ -145,15 +152,15 @@ describe("POST /api/v1/orders/checkout", () => {
   });
 
   it("rejects unverified user checkout", async () => {
-    const resAuth = await request(app).post("/api/v1/auth/register").send({
-      email: "unverified-buyer@example.com",
-      password: "correct horse battery staple",
+    const email = "unverified-buyer@example.com";
+    const [user] = await getDb().insert(users).values({ email, passwordHash: "fixture" }).returning();
+    const token = createAccessToken({
+      userId: user!.id, email, isEmailVerified: false, isOrganizer: false,
     });
-    const token = body(resAuth).data?.accessToken;
 
     const res = await request(app)
       .post("/api/v1/orders/checkout")
-      .set("Authorization", `Bearer ${token ?? ""}`)
+      .set("Authorization", `Bearer ${token}`)
       .send({
         eventId: "00000000-0000-0000-0000-000000000000",
         callbackUrl: "http://localhost:5173/callback",
@@ -352,15 +359,15 @@ describe("GET /api/v1/orders/:orderId", () => {
   });
 });
 
-describe("POST /api/v1/orders/admin/cleanup-expired", () => {
-  it("rejects non-organizer requests", async () => {
-    const buyer = await registerVerifiedUser("regular@example.com", false);
+describe("reservation cleanup", () => {
+  it("keeps global cleanup off the public API, even for an approved organizer", async () => {
+    const buyer = await registerVerifiedUser("regular@example.com", true);
 
     const res = await request(app)
       .post("/api/v1/orders/admin/cleanup-expired")
       .set("Authorization", `Bearer ${buyer.token}`);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 
   it("releases expired reservations and marks order expired", async () => {
@@ -395,12 +402,8 @@ describe("POST /api/v1/orders/admin/cleanup-expired", () => {
       .set({ reservationExpiresAt: new Date(Date.now() - 60000) })
       .where(eq(orders.id, orderId));
 
-    const cleanupRes = await request(app)
-      .post("/api/v1/orders/admin/cleanup-expired")
-      .set("Authorization", `Bearer ${org.token}`);
-
-    expect(cleanupRes.status).toBe(200);
-    expect(body(cleanupRes).data?.processed).toBe(1);
+    const results = await Promise.all([cleanupExpiredReservations(), cleanupExpiredReservations()]);
+    expect(results.reduce((total, result) => total + result.processed, 0)).toBe(1);
 
     const [updatedOrder] = await getDb().select().from(orders).where(eq(orders.id, orderId));
     expect(updatedOrder?.status).toBe("expired");
@@ -411,4 +414,17 @@ describe("POST /api/v1/orders/admin/cleanup-expired", () => {
       .where(eq(ticketTiers.id, tierId));
     expect(updatedTier?.quantityReserved).toBe(0);
   });
+});
+
+it("rejects buying a paused tier directly through checkout", async () => {
+  const organizer = await registerVerifiedUser("pause-organizer@example.com", true);
+  const buyer = await registerVerifiedUser("pause-buyer@example.com");
+  const { eventId, tierId } = await createEventFixture(organizer.token);
+  await getDb().update(ticketTiers).set({ isActive: false }).where(eq(ticketTiers.id, tierId));
+  const paystack = vi.spyOn(globalThis, "fetch");
+  const response = await request(app).post("/api/v1/orders/checkout")
+    .set("Authorization", `Bearer ${buyer.token}`)
+    .send({ eventId, items: [{ tierId, quantity: 1 }], callbackUrl: "http://localhost:5173/callback" });
+  expect(response.status).toBe(409);
+  expect(paystack).not.toHaveBeenCalled();
 });
